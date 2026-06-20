@@ -1,0 +1,5 @@
+body { font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+#app { display: flex; width: 100%; }
+#calendar { flex: 3; padding: 1rem; }
+#side-panel { flex: 1; background: #f4f4f4; padding: 1rem; border-left: 1px solid #ccc; overflow-y: auto; }
+#charts-area { position: fixed; bottom: 0; right: 0; width: 400px; background: white; border: 1px solid #ccc; }
