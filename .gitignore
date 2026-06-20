@@ -37,3 +37,4 @@ logs/
 # Uploads / data
 proto/data/
 *.json.bak
+.env
