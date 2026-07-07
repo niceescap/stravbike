@@ -14,15 +14,17 @@ app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 def on_startup():
     init_db()
 
-# Inclusion des routers — SANS authentification pour l'instant
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(athlete.router, prefix="/api/athlete", tags=["athlete"])
-app.include_router(activities.router, prefix="/api/activities", tags=["activities"])
-app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
-app.include_router(competitions.router, prefix="/api/competitions", tags=["competitions"])
-app.include_router(comments.router, prefix="/api/comments", tags=["comments"])
-app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
-app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
+# Inclusion des routers — auth via clé de service (X-API-Key)
+# vérifiée par verify_service_key sur chaque route (consommée par l'outil OpenWebUI).
+_API_DEPS = [Depends(verify_service_key)]
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"], dependencies=_API_DEPS)
+app.include_router(athlete.router, prefix="/api/athlete", tags=["athlete"], dependencies=_API_DEPS)
+app.include_router(activities.router, prefix="/api/activities", tags=["activities"], dependencies=_API_DEPS)
+app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"], dependencies=_API_DEPS)
+app.include_router(competitions.router, prefix="/api/competitions", tags=["competitions"], dependencies=_API_DEPS)
+app.include_router(comments.router, prefix="/api/comments", tags=["comments"], dependencies=_API_DEPS)
+app.include_router(llm.router, prefix="/api/llm", tags=["llm"], dependencies=_API_DEPS)
+app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"], dependencies=_API_DEPS)
 
 # Route racine sans Jinja2
 @app.get("/", response_class=HTMLResponse)
