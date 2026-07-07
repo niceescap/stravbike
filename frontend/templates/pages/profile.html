@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Profil{% endblock %}
+
+{% block content %}
+<div class="profile-page">
+    <div class="profile-card">
+        <div class="profile-card-title">Profil athlète</div>
+        <div class="profile-stats" id="profile-stats">
+            <div class="spinner"></div>
+        </div>
+    </div>
+    <div class="profile-card">
+        <div class="profile-card-title">Synchronisation Strava</div>
+        <div class="sync-status" id="sync-status">
+            <span class="dot" style="background:var(--muted)"></span>
+            <span>Chargement…</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadProfile() {
+    const stats = document.getElementById('profile-stats');
+    const sync = document.getElementById('sync-status');
+    try {
+        const a = await apiFetch('/api/athlete');
+        stats.innerHTML = `
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.ftp_watts || '—'}</div>
+                <div class="profile-stat-label">FTP (W)</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.weight_kg ? parseFloat(a.weight_kg).toFixed(1) : '—'}</div>
+                <div class="profile-stat-label">Poids (kg)</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.ftp_watts && a.weight_kg ? (parseFloat(a.ftp_watts) / parseFloat(a.weight_kg)).toFixed(2) : '—'}</div>
+                <div class="profile-stat-label">W/kg</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.ytd_distance_km ? Math.round(a.ytd_distance_km) : '—'}</div>
+                <div class="profile-stat-label">km (YTD)</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.ytd_time_hours ? Math.round(a.ytd_time_hours) : '—'}</div>
+                <div class="profile-stat-label">heures (YTD)</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">${a.ytd_elevation_m ? Math.round(a.ytd_elevation_m) : '—'}</div>
+                <div class="profile-stat-label">D+ (m)</div>
+            </div>
+        `;
+        sync.innerHTML = `<span class="dot" style="background:var(--green)"></span><span>✓ Synchronisé</span>`;
+    } catch(e) {
+        stats.innerHTML = '<p class="empty-state">Erreur de chargement.</p>';
+        sync.innerHTML = `<span class="dot" style="background:var(--red)"></span><span>Erreur</span>`;
+    }
+}
+loadProfile();
+</script>
+{% endblock %}

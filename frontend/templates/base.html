@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="api-key" content="{{ service_key }}">
+    <title>{% block title %}Coach Strava{% endblock %} — Nicolas Scapino</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────── -->
+<div id="header">
+    <div id="header-left">
+        <a href="/calendar" id="logo">COACH <span>STRAVA</span></a>
+        <div id="athlete-badge" style="display:none">
+            <div class="avatar" id="athlete-initials">NS</div>
+            <span id="athlete-name-text">Nicolas Scapino</span>
+        </div>
+    </div>
+    <div id="header-right">
+        <button class="btn-icon" onclick="refreshActivities()" title="Synchroniser Strava" id="btn-sync">↻ Sync</button>
+    </div>
+</div>
+
+<!-- ── NAV ────────────────────────────────────────────── -->
+<nav id="nav">
+    <a href="/calendar" class="nav-link {% if active_page == 'calendar' %}active{% endif %}">📅 Calendrier</a>
+    <a href="/activities" class="nav-link {% if active_page == 'activities' %}active{% endif %}">🚴 Activités</a>
+    <a href="/chat" class="nav-link {% if active_page == 'chat' %}active{% endif %}">💬 Coach IA</a>
+    <a href="/profile" class="nav-link {% if active_page == 'profile' %}active{% endif %}">👤 Profil</a>
+</nav>
+
+<!-- ── MAIN ───────────────────────────────────────────── -->
+<main id="main">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- ── TOAST ──────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── BASE JS ────────────────────────────────────────── -->
+<script src="/static/js/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Activités{% endblock %}
+
+{% block content %}
+<div class="activities-page">
+    <div class="page-header">
+        <h1 class="page-title">Activités</h1>
+        <button class="btn-primary" onclick="refreshActivities()">↻ Synchroniser</button>
+    </div>
+    <div class="activities-list" id="activities-list">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadActivities() {
+    const list = document.getElementById('activities-list');
+    if (!list) return;
+    try {
+        const data = await apiFetch('/api/activities/');
+        if (!data.length) {
+            list.innerHTML = '<p class="empty-state">Aucune activité. Synchronisez Strava pour importer vos sorties.</p>';
+            return;
+        }
+        list.innerHTML = data.map(a => `
+            <div class="activity-card" onclick="window.location.href='/calendar'">
+                <div class="activity-card-header">
+                    <div class="activity-card-title">${a.name || 'Sortie'}</div>
+                    <div class="activity-card-date">${fmtDateTime(a.start_date_local)}</div>
+                </div>
+                <div class="activity-card-metrics">
+                    ${a.tss ? `<span class="metric-pill">TSS ${Math.round(a.tss)}</span>` : ''}
+                    ${a.intensity_factor ? `<span class="metric-pill">IF ${parseFloat(a.intensity_factor).toFixed(2)}</span>` : ''}
+                    ${a.moving_time_min ? `<span class="metric-pill">${fmtDuration(a.moving_time_min)}</span>` : ''}
+                    ${a.distance_km ? `<span class="metric-pill">${Math.round(a.distance_km)} km</span>` : ''}
+                    ${a.weighted_avg_watts ? `<span class="metric-pill">NP ${Math.round(a.weighted_avg_watts)} W</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        list.innerHTML = '<p class="empty-state">Erreur de chargement.</p>';
+    }
+}
+loadActivities();
+</script>
+{% endblock %}
