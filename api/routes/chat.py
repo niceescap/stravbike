@@ -7,7 +7,7 @@ import os
 import json
 import httpx
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from api.dependencies import verify_service_key
 
@@ -25,6 +25,19 @@ class ChatMessage(BaseModel):
 @router.post("/")
 async def chat_endpoint(msg: ChatMessage):
     """Proxy streaming vers OpenWebUI (modèle + tool stravbike)."""
+
+    # Vérifier que la config est en place
+    if not OPENWEBUI_API_KEY:
+        return JSONResponse(
+            {"error": "OPENWEBUI_API_KEY non configuré dans .env"},
+            status_code=503,
+        )
+    if not OPENWEBUI_MODEL:
+        return JSONResponse(
+            {"error": "OPENWEBUI_MODEL non configuré dans .env"},
+            status_code=503,
+        )
+
     headers = {
         "Authorization": f"Bearer {OPENWEBUI_API_KEY}",
         "Content-Type": "application/json",
@@ -36,31 +49,37 @@ async def chat_endpoint(msg: ChatMessage):
     }
 
     async def event_stream():
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                f"{OPENWEBUI_BASE_URL}/api/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=120,
-            ) as resp:
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
-                        yield "data: [DONE]\n\n"
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        content = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
-                        if content:
-                            yield f"data: {json.dumps({'content': content})}\n\n"
-                    except json.JSONDecodeError:
-                        continue
+        try:
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST",
+                    f"{OPENWEBUI_BASE_URL}/api/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=120,
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            yield "data: [DONE]\n\n"
+                            break
+                        try:
+                            chunk = json.loads(data)
+                            content = (
+                                chunk.get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content", "")
+                            )
+                            if content:
+                                yield f"data: {json.dumps({'content': content})}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+        except httpx.ConnectError:
+            yield f"data: {json.dumps({'error': f'Impossible de joindre OpenWebUI ({OPENWEBUI_BASE_URL}). Vérifiez OPENWEBUI_BASE_URL et que le service tourne.'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

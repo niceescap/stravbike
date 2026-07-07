@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("/")
-def list_activities(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0), db: Session = Depends(get_db)):
+def list_activities(limit: int = Query(500, ge=1, le=1000), offset: int = Query(0, ge=0), db: Session = Depends(get_db)):
     """Liste les activités de l'athlète, triées par date décroissante."""
     athlete = db.query(Athlete).first()
     if not athlete:

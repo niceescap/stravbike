@@ -1,7 +1,7 @@
 """
 Routes web — servent les pages HTML via Jinja2.
 L'auth (X-API-Key) est injectée côté serveur dans les templates.
-Aucune dépendance sur verify_service_key ici : les pages HTML ne sont pas des API.
+Aucune dépendance sur verify_service key ici : les pages HTML ne sont pas des API.
 """
 import os
 from fastapi import APIRouter, Request
@@ -41,7 +41,7 @@ def activity_detail_page(request: Request, activity_id: int):
     return templates.TemplateResponse(
         request,
         "pages/activity_detail.html",
-        _ctx(page="activities", activity_id=activity_id),
+        _ctx(page="activity_detail", activity_id=activity_id),
     )
 
 

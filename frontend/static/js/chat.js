@@ -53,7 +53,10 @@ const Chat = {
                 body: JSON.stringify({ message }),
             });
 
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP ${response.status}`);
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -73,6 +76,10 @@ const Chat = {
                     if (data === '[DONE]') break;
                     try {
                         const parsed = JSON.parse(data);
+                        if (parsed.error) {
+                            contentEl.innerHTML = `<span style="color:var(--red)">⚠ ${parsed.error}</span>`;
+                            return;
+                        }
                         if (parsed.content) {
                             fullText += parsed.content;
                             contentEl.innerHTML = this._renderMarkdown(fullText);
@@ -86,7 +93,7 @@ const Chat = {
                 contentEl.textContent = 'Pas de réponse.';
             }
         } catch (e) {
-            contentEl.textContent = 'Erreur : ' + e.message;
+            contentEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
         } finally {
             this._setSending(false);
         }
