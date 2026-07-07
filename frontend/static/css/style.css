@@ -380,8 +380,8 @@ body {
 .spinning { animation: spin .7s linear infinite; display: inline-block; }
 
 /* ── MODAL GRAPHIQUE ─────────────────────────────────── */
-#chart-modal { position: fixed; z-index: 400; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px; }
-#chart-modal.open { display: flex; }
+#chart-modal { position: fixed; z-index: 400; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px; pointer-events: none; }
+#chart-modal.open { display: flex; pointer-events: auto; }
 #chart-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); }
 #chart-box { position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 560px; }
 #chart-box-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
