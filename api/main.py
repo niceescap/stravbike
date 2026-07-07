@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from db.database import init_db
 from api.routes import auth, athlete, activities, sessions, competitions, comments, llm, calendar
+from api.dependencies import verify_service_key
 import uvicorn
 
 app = FastAPI(title="Strava Coach Dashboard")
