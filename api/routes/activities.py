@@ -6,6 +6,17 @@ from ingestion.ingest_activities import incremental_refresh
 
 router = APIRouter()
 
+@router.get("/")
+def list_activities(limit: int = 50, db: Session = Depends(get_db)):
+    """Liste des activités récentes (par défaut 50, triées par date desc)."""
+    athlete = db.query(Athlete).first()
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    activities = db.query(ActivityModel).filter(
+        ActivityModel.athlete_id == athlete.id
+    ).order_by(ActivityModel.start_date.desc()).limit(limit).all()
+    return activities
+
 @router.get("/{activity_id}")
 def get_activity(activity_id: int, db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
