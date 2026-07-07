@@ -103,7 +103,7 @@ const App = {
         if (!container) return;
         container.innerHTML = '<div class="spinner"></div>';
         try {
-            const activities = await this.apiFetch(`${this.API}/activities/?limit=50`);
+            const activities = await this.apiFetch(`${this.API}/activities/?limit=500`);
             if (!activities.length) {
                 container.innerHTML = '<div class="empty-state">Aucune activité. Cliquez sur <strong>Sync</strong> pour importer depuis Strava.</div>';
                 return;
