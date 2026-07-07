@@ -1,5 +1,8 @@
 import os
+from dotenv import load_dotenv
 from fastapi import Header, HTTPException
+
+load_dotenv()
 
 SERVICE_KEY = os.getenv("STRAVBIKE_SERVICE_KEY")
 
