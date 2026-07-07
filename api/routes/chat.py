@@ -6,10 +6,13 @@ Ce routeur forward les messages du frontend vers l'API OpenWebUI et stream la r√
 import os
 import json
 import httpx
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from api.dependencies import verify_service_key
+
+load_dotenv()
 
 router = APIRouter()
 
