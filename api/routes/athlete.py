@@ -2,12 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import Athlete
-from api.routes.auth import get_current_coach
 
 router = APIRouter()
 
 @router.get("")
-def get_athlete(db: Session = Depends(get_db), coach=Depends(get_current_coach)):
+def get_athlete(db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     if not athlete:
         return {"message": "No athlete found"}

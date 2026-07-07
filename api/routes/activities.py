@@ -12,7 +12,7 @@ def get_activity(activity_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Athlete not found")
     activity = db.query(ActivityModel).filter(
         ActivityModel.athlete_id == athlete.id,
-        ActivityModel.strava_id == activity_id
+        ActivityModel.id == activity_id
     ).first()
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
