@@ -3,12 +3,11 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import Athlete, Competition
 from api.models import CompetitionCreate, CompetitionOut
-from api.routes.auth import get_current_coach
 
 router = APIRouter()
 
 @router.post("/", response_model=CompetitionOut)
-def create_competition(comp: CompetitionCreate, db: Session = Depends(get_db), coach=Depends(get_current_coach)):
+def create_competition(comp: CompetitionCreate, db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
@@ -19,14 +18,14 @@ def create_competition(comp: CompetitionCreate, db: Session = Depends(get_db), c
     return db_comp
 
 @router.get("/", response_model=list[CompetitionOut])
-def list_competitions(db: Session = Depends(get_db), coach=Depends(get_current_coach)):
+def list_competitions(db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     if not athlete:
         return []
     return db.query(Competition).filter(Competition.athlete_id == athlete.id).all()
 
 @router.get("/{comp_id}", response_model=CompetitionOut)
-def get_competition(comp_id: int, db: Session = Depends(get_db), coach=Depends(get_current_coach)):
+def get_competition(comp_id: int, db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     comp = db.query(Competition).filter(Competition.id == comp_id, Competition.athlete_id == athlete.id).first()
     if not comp:
@@ -34,7 +33,7 @@ def get_competition(comp_id: int, db: Session = Depends(get_db), coach=Depends(g
     return comp
 
 @router.delete("/{comp_id}")
-def delete_competition(comp_id: int, db: Session = Depends(get_db), coach=Depends(get_current_coach)):
+def delete_competition(comp_id: int, db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     comp = db.query(Competition).filter(Competition.id == comp_id, Competition.athlete_id == athlete.id).first()
     if not comp:

@@ -38,3 +38,4 @@ logs/
 proto/data/
 *.json.bak
 .env
+__pycache__/
