@@ -26,7 +26,8 @@ const Calendar = {
             events: async (info, ok, fail) => {
                 try {
                     const start = info.startStr.split('T')[0];
-                    const data = await App.apiFetch(`${App.API}/calendar/week?start_date=${start}`);
+                    const end = info.endStr.split('T')[0];
+                    const data = await App.apiFetch(`${App.API}/calendar/week?start_date=${start}&end_date=${end}`);
                     this._pendingTss = this._aggregateTss(data);
                     ok(data.map(ev => ({
                         id: ev.activity_id || ev.session_id || ev.competition_id,
