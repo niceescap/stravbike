@@ -14,9 +14,9 @@ templates = Jinja2Templates(directory="frontend/templates")
 SERVICE_KEY = os.getenv("STRAVBIKE_SERVICE_KEY", "")
 
 
-def _ctx(request: Request, **kwargs):
-    """Contexte de template commun."""
-    ctx = {"request": request, "service_key": SERVICE_KEY}
+def _ctx(**kwargs):
+    """Contexte de template commun (request passé séparément à TemplateResponse)."""
+    ctx = {"service_key": SERVICE_KEY}
     ctx.update(kwargs)
     return ctx
 
@@ -28,27 +28,28 @@ def index(request: Request):
 
 @router.get("/calendar", response_class=HTMLResponse)
 def calendar_page(request: Request):
-    return templates.TemplateResponse("pages/calendar.html", _ctx(request, page="calendar"))
+    return templates.TemplateResponse(request, "pages/calendar.html", _ctx(page="calendar"))
 
 
 @router.get("/activities", response_class=HTMLResponse)
 def activities_page(request: Request):
-    return templates.TemplateResponse("pages/activities.html", _ctx(request, page="activities"))
+    return templates.TemplateResponse(request, "pages/activities.html", _ctx(page="activities"))
 
 
 @router.get("/activities/{activity_id}", response_class=HTMLResponse)
 def activity_detail_page(request: Request, activity_id: int):
     return templates.TemplateResponse(
+        request,
         "pages/activity_detail.html",
-        _ctx(request, page="activities", activity_id=activity_id),
+        _ctx(page="activities", activity_id=activity_id),
     )
 
 
 @router.get("/chat", response_class=HTMLResponse)
 def chat_page(request: Request):
-    return templates.TemplateResponse("pages/chat.html", _ctx(request, page="chat"))
+    return templates.TemplateResponse(request, "pages/chat.html", _ctx(page="chat"))
 
 
 @router.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request):
-    return templates.TemplateResponse("pages/profile.html", _ctx(request, page="profile"))
+    return templates.TemplateResponse(request, "pages/profile.html", _ctx(page="profile"))
