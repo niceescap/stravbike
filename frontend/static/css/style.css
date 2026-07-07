@@ -116,6 +116,7 @@ body {
 #content {
     padding-top: var(--header-h);
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 /* ── FULLCALENDAR OVERRIDE ───────────────────────────── */
