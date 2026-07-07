@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import date, timedelta
 from db.database import get_db
 from db.models import Athlete, PlannedSession
 from api.models import SessionCreate, SessionUpdate, SessionOut
@@ -18,11 +19,23 @@ def create_session(session: SessionCreate, db: Session = Depends(get_db)):
     return db_session
 
 @router.get("/", response_model=list[SessionOut])
-def list_sessions(db: Session = Depends(get_db)):
+def list_sessions(week: str = None, db: Session = Depends(get_db)):
     athlete = db.query(Athlete).first()
     if not athlete:
         return []
-    return db.query(PlannedSession).filter(PlannedSession.athlete_id == athlete.id).all()
+    query = db.query(PlannedSession).filter(PlannedSession.athlete_id == athlete.id)
+    # Filtre optionnel par semaine (lundi de la semaine, format YYYY-MM-DD)
+    if week:
+        try:
+            start = date.fromisoformat(week)
+        except ValueError:
+            return []
+        end = start + timedelta(days=7)
+        query = query.filter(
+            PlannedSession.session_date >= start,
+            PlannedSession.session_date < end,
+        )
+    return query.all()
 
 @router.get("/{session_id}", response_model=SessionOut)
 def get_session(session_id: int, db: Session = Depends(get_db)):
