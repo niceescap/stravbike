@@ -25,6 +25,10 @@ def compute_if_tss(weighted_avg_watts, moving_time_seconds, ftp_watts):
         intensity_factor = None
     tss = None
     if intensity_factor and moving_time_seconds:
+        tss = (moving_time_seconds * float(weighted_avg_watts) * intensity_factor) / (ftp_watts * 3600) * 100
+    return intensity_factor, tss
+
+
 import json
 import math
 
