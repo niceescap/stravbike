@@ -10,6 +10,17 @@
 <div class="detail-container" id="detail-container" data-activity-id="{{ activity_id }}">
     <div class="spinner"></div>
 </div>
+
+<!-- Modal graphique streams -->
+<div id="chart-modal" class="chart-modal">
+    <div class="chart-modal-content">
+        <div class="chart-modal-header">
+            <h2>📈 Courbes de séance</h2>
+            <button class="chart-close" onclick="Charts.close()">✕</button>
+        </div>
+        <canvas id="chart-canvas"></canvas>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
