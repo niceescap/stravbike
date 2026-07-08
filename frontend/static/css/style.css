@@ -302,6 +302,23 @@ body {
 .chat-bubble ul, .chat-bubble ol { margin: 8px 0 8px 20px; }
 .chat-bubble li { margin-bottom: 4px; }
 .chat-bubble strong { color: var(--orange); }
+/* ── Chat : réflexion + tool status ─────────────────── */
+.chat-reasoning { margin-bottom: 10px; }
+.chat-reasoning summary {
+    cursor: pointer; font-size: 12px; color: var(--muted);
+    font-style: italic; padding: 4px 0;
+}
+.chat-reasoning-content {
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+    padding: 8px 12px; background: var(--bg); border-radius: 8px;
+    border: 1px solid var(--border); margin-top: 4px;
+    white-space: pre-wrap; max-height: 200px; overflow-y: auto;
+}
+.chat-tool-status {
+    font-size: 12px; color: var(--mint); padding: 6px 10px;
+    background: var(--mint-dim); border-radius: 8px; margin-bottom: 8px;
+    border: 1px solid var(--mint); font-family: 'Courier New', monospace;
+}
 #chat-input-wrap {
     padding: 16px 20px; border-top: 1px solid var(--border);
     display: flex; gap: 10px; align-items: flex-end;
