@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import Activity as ActivityModel
-from ingestion.ingest_activities import incremental_refresh
+from ingestion.ingest_activities import incremental_refresh, fetch_and_store_streams
 
 router = APIRouter()
 
