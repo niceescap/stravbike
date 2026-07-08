@@ -1,6 +1,9 @@
 /* ═══════════════════════════════════════════════════════════
-   chat.js — Widget chat avec streaming SSE
+   chat.js — Widget chat avec streaming SSE + mémoire de conversation
    Proxy: POST /api/chat/ → OpenWebUI (modèle + tool stravbike)
+
+   Envoie l'historique complet de la conversation (messages[]) au proxy.
+   Gère les events SSE : content, reasoning, tool_status, error, [DONE].
    ═══════════════════════════════════════════════════════════ */
 
 const Chat = {
@@ -8,6 +11,9 @@ const Chat = {
     inputEl: null,
     sendBtn: null,
     sending: false,
+
+    // Historique de conversation : [{role: "user"|"assistant", content: "..."}]
+    history: [],
 
     init() {
         this.messagesEl = document.getElementById('chat-messages');
@@ -38,10 +44,20 @@ const Chat = {
         this.inputEl.style.height = 'auto';
         this._setSending(true);
 
+        // Construire l'historique à envoyer : history + nouveau message
+        const messages = [
+            ...this.history,
+            { role: 'user', content: message }
+        ];
+
         // Créer le placeholder assistant
         const assistantEl = this._addMessage('assistant', '');
         const contentEl = assistantEl.querySelector('.chat-bubble');
         contentEl.innerHTML = '<span class="spinner"></span>';
+
+        let fullText = '';
+        let fullReasoning = '';
+        let toolStatusHtml = '';
 
         try {
             const response = await fetch('/api/chat/', {
@@ -50,7 +66,7 @@ const Chat = {
                     'X-API-Key': App.SERVICE_KEY,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ messages }),
             });
 
             if (!response.ok) {
@@ -60,8 +76,11 @@ const Chat = {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let fullText = '';
             contentEl.innerHTML = '';
+
+            // Zone de réflexion (collapsible)
+            let reasoningEl = null;
+            let reasoningToggle = null;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -80,9 +99,43 @@ const Chat = {
                             contentEl.innerHTML = `<span style="color:var(--red)">⚠ ${parsed.error}</span>`;
                             return;
                         }
+                        // Reasoning (réflexion du modèle en temps réel)
+                        if (parsed.reasoning) {
+                            if (!reasoningEl) {
+                                reasoningToggle = document.createElement('details');
+                                reasoningToggle.className = 'chat-reasoning';
+                                reasoningToggle.innerHTML = '<summary>💭 Réflexion</summary>';
+                                reasoningEl = document.createElement('div');
+                                reasoningEl.className = 'chat-reasoning-content';
+                                reasoningToggle.appendChild(reasoningEl);
+                                contentEl.appendChild(reasoningToggle);
+                            }
+                            fullReasoning += parsed.reasoning;
+                            reasoningEl.textContent = fullReasoning;
+                            this._scrollToBottom();
+                        }
+                        // Tool status (exécution d'un tool)
+                        if (parsed.tool_status) {
+                            if (!toolStatusHtml) {
+                                const toolEl = document.createElement('div');
+                                toolEl.className = 'chat-tool-status';
+                                contentEl.appendChild(toolEl);
+                                toolStatusHtml = toolEl;
+                            }
+                            toolStatusHtml.innerHTML = `🔧 ${parsed.tool_status}`;
+                            this._scrollToBottom();
+                        }
+                        // Content (texte de réponse)
                         if (parsed.content) {
                             fullText += parsed.content;
-                            contentEl.innerHTML = this._renderMarkdown(fullText);
+                            // Préserver la zone de réflexion si elle existe
+                            const reasoningHtml = reasoningToggle ? reasoningToggle.outerHTML : '';
+                            contentEl.innerHTML = reasoningHtml + this._renderMarkdown(fullText);
+                            // Re-garder la référence reasoning après re-render
+                            if (reasoningToggle) {
+                                const existing = contentEl.querySelector('.chat-reasoning');
+                                if (existing) reasoningToggle = existing;
+                            }
                             this._scrollToBottom();
                         }
                     } catch (e) { continue; }
@@ -92,6 +145,11 @@ const Chat = {
             if (!fullText) {
                 contentEl.textContent = 'Pas de réponse.';
             }
+
+            // Sauvegarder dans l'historique de conversation
+            this.history.push({ role: 'user', content: message });
+            this.history.push({ role: 'assistant', content: fullText });
+
         } catch (e) {
             contentEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
         } finally {
