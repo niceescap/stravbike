@@ -151,10 +151,9 @@ const App = {
                     <div class="detail-metric"><div class="val">${a.avg_heartrate ? Math.round(a.avg_heartrate) : '—'}</div><div class="lbl">FC moy</div></div>
                     <div class="detail-metric"><div class="val">${a.avg_speed_kmh ? parseFloat(a.avg_speed_kmh).toFixed(1) : '—'}</div><div class="lbl">km/h</div></div>
                 </div>
-                ${a.streams_json ? `
                 <button class="btn-chart" onclick="Charts.open(${a.id})">
                     📈 Graphique puissance / FC
-                </button>` : ''}
+                </button>
             `;
         } catch (e) {
             container.innerHTML = '<div class="empty-state" style="color:var(--red)">Erreur de chargement.</div>';
