@@ -100,7 +100,8 @@ def fetch_and_store_streams(db: Session, activity_id: int) -> dict | None:
     else:
         print(f"⚠ Aucun stream récupéré pour l'activité {activity_id}")
 
-    return intensity_factor, tss
+    return streams
+
 
 def import_historical(db: Session, athlete_id: int, limit: int = 100):
     athlete = db.query(Athlete).filter(Athlete.id == athlete_id).first()
