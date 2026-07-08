@@ -12,11 +12,12 @@
 </div>
 
 <!-- Modal graphique streams -->
-<div id="chart-modal" class="chart-modal">
-    <div class="chart-modal-content">
-        <div class="chart-modal-header">
-            <h2>📈 Courbes de séance</h2>
-            <button class="chart-close" onclick="Charts.close()">✕</button>
+<div id="chart-modal">
+    <div id="chart-backdrop" onclick="Charts.close()"></div>
+    <div id="chart-box">
+        <div id="chart-box-header">
+            <div id="chart-box-title">📈 Courbes de séance</div>
+            <button id="chart-close" onclick="Charts.close()">✕</button>
         </div>
         <canvas id="chart-canvas"></canvas>
     </div>
