@@ -18,6 +18,7 @@ def calendar_week(
     FullCalendar en month view envoie ~42 jours de plage visible.
     """
     end = end_date if end_date else start_date + timedelta(days=7)
+    # calendar_view ne filtre pas sur athlete_id (mono-athlète) — pas d'impact des orphelins
     query = text("""
         SELECT * FROM calendar_view
         WHERE calendar_date >= :start AND calendar_date < :end
