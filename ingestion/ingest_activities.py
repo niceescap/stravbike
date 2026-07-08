@@ -100,8 +100,6 @@ def fetch_and_store_streams(db: Session, activity_id: int) -> dict | None:
     else:
         print(f"⚠ Aucun stream récupéré pour l'activité {activity_id}")
 
-    return streams
-        tss = (moving_time_seconds * float(weighted_avg_watts) * intensity_factor) / (ftp_watts * 3600) * 100
     return intensity_factor, tss
 
 def import_historical(db: Session, athlete_id: int, limit: int = 100):
