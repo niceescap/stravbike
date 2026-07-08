@@ -2,6 +2,9 @@
 Proxy chat → OpenWebUI.
 Le modèle personnalisé (avec tool stravbike_tool.py rattaché) vit côté OpenWebUI.
 Ce routeur forward les messages du frontend vers l'API OpenWebUI et stream la réponse.
+
+⚠️ DIAGNOSTIC TEMPORAIRE : stream désactivé pour inspecter la réponse JSON brute.
+    À restaurer après analyse des champs tool_calls / finish_reason / message / content.
 """
 import os
 import json
@@ -24,7 +27,7 @@ class ChatMessage(BaseModel):
 
 @router.post("/")
 async def chat_endpoint(msg: ChatMessage):
-    """Proxy streaming vers OpenWebUI (modèle + tool stravbike)."""
+    """Proxy non-streaming vers OpenWebUI — DIAGNOSTIC : inspecte la réponse JSON brute."""
     headers = {
         "Authorization": f"Bearer {OPENWEBUI_API_KEY}",
         "Content-Type": "application/json",
@@ -32,35 +35,21 @@ async def chat_endpoint(msg: ChatMessage):
     payload = {
         "model": OPENWEBUI_MODEL,
         "messages": [{"role": "user", "content": msg.message}],
-        "stream": True,
+        "stream": False,
     }
 
-    async def event_stream():
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                f"{OPENWEBUI_BASE_URL}/api/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=120,
-            ) as resp:
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
-                        yield "data: [DONE]\n\n"
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        content = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
-                        if content:
-                            yield f"data: {json.dumps({'content': content})}\n\n"
-                    except json.JSONDecodeError:
-                        continue
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{OPENWEBUI_BASE_URL}/api/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=120,
+        )
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    # ── DIAGNOSTIC : afficher la réponse JSON brute ──────────────────
+    print("===== RAW OPENWEBUI RESPONSE =====")
+    print(json.dumps(resp.json(), indent=2))
+    print("===== END RAW RESPONSE =====")
+
+    # On retourne la réponse brute telle quelle — pas de parsing, pas de logique métier.
+    return resp.json()
