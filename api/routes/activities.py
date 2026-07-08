@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import Activity as ActivityModel
-from ingestion.ingest_activities import incremental_refresh
+from ingestion.ingest_activities import incremental_refresh, fetch_and_store_streams
 
 router = APIRouter()
 
@@ -31,6 +31,21 @@ def get_activity(activity_id: int, db: Session = Depends(get_db)):
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     return activity
+
+
+@router.get("/{activity_id}/streams")
+def get_activity_streams(activity_id: int, db: Session = Depends(get_db)):
+    """Récupère les streams d'une activité. Si déjà en DB, retourne directement.
+    Sinon, interroge Strava, stocke, et retourne."""
+    try:
+        streams = fetch_and_store_streams(db, activity_id)
+        if streams is None:
+            raise HTTPException(status_code=404, detail="Aucun stream disponible pour cette activité")
+        return streams
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur récupération streams: {e}")
 
 
 @router.post("/refresh")

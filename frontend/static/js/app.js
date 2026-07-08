@@ -135,6 +135,13 @@ const App = {
         container.innerHTML = '<div class="spinner"></div>';
         try {
             const a = await this.apiFetch(`${this.API}/activities/${id}`);
+
+            // Fetch comments en parallèle
+            let comments = [];
+            try {
+                comments = await this.apiFetch(`${this.API}/comments/?activity_id=${id}`);
+            } catch (e) { /* comments optionnels */ }
+
             container.innerHTML = `
                 <a href="/activities" class="back-link">← Retour à la liste</a>
                 <div class="detail-header">
@@ -151,14 +158,66 @@ const App = {
                     <div class="detail-metric"><div class="val">${a.avg_heartrate ? Math.round(a.avg_heartrate) : '—'}</div><div class="lbl">FC moy</div></div>
                     <div class="detail-metric"><div class="val">${a.avg_speed_kmh ? parseFloat(a.avg_speed_kmh).toFixed(1) : '—'}</div><div class="lbl">km/h</div></div>
                 </div>
-                ${a.streams_json ? `
+
                 <button class="btn-chart" onclick="Charts.open(${a.id})">
                     📈 Graphique puissance / FC
-                </button>` : ''}
+                </button>
+
+                <div class="detail-section">
+                    <h3>💬 Commentaires</h3>
+                    <div id="comments-list" class="comments-list">
+                        ${this._renderComments(comments)}
+                    </div>
+                    <div class="comment-input-wrap">
+                        <textarea id="new-comment" placeholder="Ajouter un commentaire…"></textarea>
+                        <div class="comment-input-footer">
+                            <select class="role-select" id="comment-role"><option value="coach">Coach</option><option value="athlete">Athlète</option></select>
+                            <button class="btn-send" onclick="App._addCommentDetail(${a.id})">Envoyer</button>
+                        </div>
+                    </div>
+                </div>
             `;
         } catch (e) {
             container.innerHTML = '<div class="empty-state" style="color:var(--red)">Erreur de chargement.</div>';
         }
+    },
+
+    _renderComments(comments) {
+        if (!comments || !comments.length) {
+            return '<p style="color:var(--muted);font-size:13px">Aucun commentaire.</p>';
+        }
+        return comments.map(c => {
+            const isCoach = c.author_role === 'coach';
+            return `<div class="comment-item">
+                <div class="comment-avatar ${isCoach ? 'avatar-coach' : 'avatar-athlete'}">${isCoach ? 'C' : 'N'}</div>
+                <div class="comment-bubble">
+                    <div class="comment-meta">${isCoach ? 'Coach' : 'Nicolas'} · ${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : ''}</div>
+                    ${c.comment}
+                </div>
+            </div>`;
+        }).join('');
+    },
+
+    async _addCommentDetail(activityId) {
+        const text = document.getElementById('new-comment')?.value?.trim();
+        const role = document.getElementById('comment-role')?.value || 'coach';
+        if (!text) return;
+        try {
+            await this.apiFetch(`${this.API}/comments/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    activity_id: activityId,
+                    comment: text, author_role: role,
+                }),
+            });
+            document.getElementById('new-comment').value = '';
+            // Recharger les commentaires
+            const comments = await this.apiFetch(`${this.API}/comments/?activity_id=${activityId}`);
+            const listEl = document.getElementById('comments-list');
+            if (listEl) listEl.innerHTML = this._renderComments(comments);
+            this.showToast('✓ Commentaire envoyé');
+        } catch (e) { this.showToast('Erreur envoi commentaire'); }
     },
 
     // ── Profile page ───────────────────────────────────────

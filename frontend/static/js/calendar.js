@@ -173,6 +173,11 @@ const Calendar = {
             </div></div>`;
         }
 
+        // Lien vers la page de détail complète
+        if (ev.activity_id) {
+            html += `<div style="margin-top:8px"><a href="/activities/${ev.activity_id}" class="btn-detail-link">📊 Voir le détail complet & graphique →</a></div>`;
+        }
+
         return html;
     },
 
