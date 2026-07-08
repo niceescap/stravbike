@@ -25,6 +25,78 @@ def compute_if_tss(weighted_avg_watts, moving_time_seconds, ftp_watts):
         intensity_factor = None
     tss = None
     if intensity_factor and moving_time_seconds:
+import json
+import math
+
+STREAM_TYPES = ["time", "watts", "heartrate", "velocity_smooth", "cadence", "grade_smooth"]
+
+MAX_STREAM_POINTS = 300  # downsampling target for chart performance
+
+
+def _downsample(values: list, target: int = MAX_STREAM_POINTS) -> list:
+    """Downsample a list to ~target points using stride sampling."""
+    if not values or len(values) <= target:
+        return values
+    stride = len(values) / target
+    return [values[int(i * stride)] for i in range(target)]
+
+
+def fetch_activity_streams(strava_client: Client, strava_id: int) -> dict | None:
+    """Fetch streams from Strava API and return a compact dict ready for streams_json.
+
+    Returns: {"time": [...], "watts": [...], "heartrate": [...], ...}
+    or None if the API call fails or returns no data.
+    """
+    try:
+        streams = strava_client.get_activity_streams(
+            strava_id,
+            types=STREAM_TYPES,
+            resolution="medium",  # Strava-side downsampling (~5s interval)
+        )
+    except Exception as e:
+        print(f"⚠ Erreur streams pour {strava_id}: {e}")
+        return None
+
+    result = {}
+    for stream_type in STREAM_TYPES:
+        stream = streams.get(stream_type)
+        if stream and stream.data:
+            result[stream_type] = _downsample(list(stream.data))
+
+    if not result:
+        return None
+
+    # Computed: time axis in minutes (for chart labels)
+    if "time" in result and result["time"]:
+        result["time_min"] = [round(t / 60.0, 2) for t in result["time"]]
+
+    return result
+
+
+def fetch_and_store_streams(db: Session, activity_id: int) -> dict | None:
+    """Fetch streams from Strava for a specific activity and store in DB.
+
+    Returns the streams dict if successful, None otherwise.
+    """
+    activity = db.query(Activity).filter(Activity.id == activity_id).first()
+    if not activity:
+        return None
+
+    # Already fetched? Return cached.
+    if activity.streams_json:
+        return activity.streams_json
+
+    strava_client = get_strava_client()
+    streams = fetch_activity_streams(strava_client, activity.strava_id)
+
+    if streams:
+        activity.streams_json = streams
+        db.commit()
+        print(f"✅ Streams stockés pour l'activité {activity_id} ({len(streams.get('time', []))} points)")
+    else:
+        print(f"⚠ Aucun stream récupéré pour l'activité {activity_id}")
+
+    return streams
         tss = (moving_time_seconds * float(weighted_avg_watts) * intensity_factor) / (ftp_watts * 3600) * 100
     return intensity_factor, tss
 
