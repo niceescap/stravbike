@@ -2,6 +2,10 @@
 Proxy chat → OpenWebUI.
 Le modèle personnalisé (avec tool stravbike_tool.py rattaché) vit côté OpenWebUI.
 Ce routeur forward les messages du frontend vers l'API OpenWebUI et stream la réponse.
+
+Key : tool_ids doit être passé dans le payload pour qu'OpenWebUI résolve les specs
+et callables, injecte le paramètre `tools` au format OpenAI dans la requête au LLM,
+et exécute la boucle tool_call → exécution → second appel LLM (handler streaming uniquement).
 """
 import os
 import json
@@ -19,6 +23,11 @@ router = APIRouter()
 OPENWEBUI_BASE_URL = os.getenv("OPENWEBUI_BASE_URL", "http://localhost:3000")
 OPENWEBUI_API_KEY = os.getenv("OPENWEBUI_API_KEY", "")
 OPENWEBUI_MODEL = os.getenv("OPENWEBUI_MODEL", "")
+OPENWEBUI_TOOL_IDS = [
+    tid.strip()
+    for tid in os.getenv("OPENWEBUI_TOOL_IDS", "").split(",")
+    if tid.strip()
+]
 
 
 class ChatMessage(BaseModel):
@@ -40,6 +49,11 @@ async def chat_endpoint(msg: ChatMessage):
             {"error": "OPENWEBUI_MODEL non configuré dans .env"},
             status_code=503,
         )
+    if not OPENWEBUI_TOOL_IDS:
+        return JSONResponse(
+            {"error": "OPENWEBUI_TOOL_IDS non configuré dans .env"},
+            status_code=503,
+        )
 
     headers = {
         "Authorization": f"Bearer {OPENWEBUI_API_KEY}",
@@ -49,6 +63,7 @@ async def chat_endpoint(msg: ChatMessage):
         "model": OPENWEBUI_MODEL,
         "messages": [{"role": "user", "content": msg.message}],
         "stream": True,
+        "tool_ids": OPENWEBUI_TOOL_IDS,
     }
 
     async def event_stream():
