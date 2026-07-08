@@ -81,12 +81,12 @@ async def execute_tool(function_name: str, arguments: dict) -> str:
             return resp.text
 
         elif function_name == "get_competitions":
-            resp = await client.get(f"{STRAVBIKE_API_BASE}/competitions", headers=headers, timeout=10)
+            resp = await client.get(f"{STRAVBIKE_API_BASE}/competitions/", headers=headers, timeout=10)
             return resp.text
 
         elif function_name == "get_planned_sessions":
             resp = await client.get(
-                f"{STRAVBIKE_API_BASE}/sessions",
+                f"{STRAVBIKE_API_BASE}/sessions/",
                 params={"week": arguments.get("week", "")},
                 headers=headers,
                 timeout=10,
