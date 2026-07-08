@@ -33,6 +33,21 @@ def get_activity(activity_id: int, db: Session = Depends(get_db)):
     return activity
 
 
+@router.get("/{activity_id}/streams")
+def get_activity_streams(activity_id: int, db: Session = Depends(get_db)):
+    """Récupère les streams d'une activité. Si déjà en DB, retourne directement.
+    Sinon, interroge Strava, stocke, et retourne."""
+    try:
+        streams = fetch_and_store_streams(db, activity_id)
+        if streams is None:
+            raise HTTPException(status_code=404, detail="Aucun stream disponible pour cette activité")
+        return streams
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur récupération streams: {e}")
+
+
 @router.post("/refresh")
 def refresh_activities(db: Session = Depends(get_db)):
     """Déclenche une synchronisation incrémentale depuis Strava (nouvelles activités)."""
