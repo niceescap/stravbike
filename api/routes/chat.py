@@ -3,12 +3,17 @@ Proxy chat → OpenWebUI.
 Le modèle personnalisé (avec tool stravbike_tool.py rattaché) vit côté OpenWebUI.
 Ce routeur forward les messages du frontend vers l'API OpenWebUI et stream la réponse.
 
-Key : tool_ids doit être passé dans le payload pour qu'OpenWebUI résolve les specs
-et callables, injecte le paramètre `tools` au format OpenAI dans la requête au LLM,
-et exécute la boucle tool_call → exécution → second appel LLM (handler streaming uniquement).
+Trois éléments indispensables dans le payload pour reproduire le comportement natif :
+1. tool_ids       → OpenWebUI résout specs + callables, injecte `tools` au format OpenAI
+2. chat_id + id   → active event_emitter → prend le handler streaming complet avec boucle
+                     tool_call → exécution → second appel LLM (sinon: fallback sans boucle)
+3. stream: True   → la boucle d'exécution n'existe que dans le handler streaming
+
+chat_id préfixé "local:" → skip des écritures DB (pas de chat persistant côté OpenWebUI).
 """
 import os
 import json
+import uuid
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
@@ -59,11 +64,19 @@ async def chat_endpoint(msg: ChatMessage):
         "Authorization": f"Bearer {OPENWEBUI_API_KEY}",
         "Content-Type": "application/json",
     }
+
+    # chat_id préfixé "local:" → event_emitter activé mais écritures DB skipées
+    # id (message_id) → requis avec chat_id pour que event_emitter soit non-None
+    chat_id = f"local:{uuid.uuid4()}"
+    message_id = str(uuid.uuid4())
+
     payload = {
         "model": OPENWEBUI_MODEL,
         "messages": [{"role": "user", "content": msg.message}],
         "stream": True,
         "tool_ids": OPENWEBUI_TOOL_IDS,
+        "chat_id": chat_id,
+        "id": message_id,
     }
 
     async def event_stream():
