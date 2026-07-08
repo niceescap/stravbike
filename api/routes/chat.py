@@ -1,18 +1,19 @@
 """
-Proxy chat → OpenWebUI.
-Le modèle personnalisé (avec tool stravbike_tool.py rattaché) vit côté OpenWebUI.
-Ce routeur forward les messages du frontend vers l'API OpenWebUI et stream la réponse.
+Proxy chat → OpenWebUI avec boucle tool_call native.
 
-Trois éléments indispensables dans le payload pour reproduire le comportement natif :
-1. tool_ids       → OpenWebUI résout specs + callables, injecte `tools` au format OpenAI
-2. chat_id + id   → active event_emitter → prend le handler streaming complet avec boucle
-                     tool_call → exécution → second appel LLM (sinon: fallback sans boucle)
-3. stream: True   → la boucle d'exécution n'existe que dans le handler streaming
+Architecture :
+  1. Le proxy envoie la requête à OpenWebUI AVEC tool_ids mais SANS chat_id/id.
+     → event_emitter = None → fallback streaming path → raw LLM SSE transmis tel quel.
+     → Le LLM reçoit le paramètre `tools` (format OpenAI) et peut émettre des tool_calls.
+  2. Le proxy stream le contenu + reasoning au frontend en temps réel (SSE).
+  3. Le proxy collecte les tool_calls dans le flux SSE.
+  4. Quand le stream se termine avec finish_reason="tool_calls", le proxy exécute
+     les tools localement (appels HTTP vers l'API stravbike).
+  5. Le proxy construit un nouveau messages avec les résultats et renvoie à OpenWebUI.
+  6. Le proxy stream la nouvelle réponse. Boucle jusqu'à finish_reason="stop".
 
-chat_id préfixé "local:" → skip des écritures DB (pas de chat persistant côté OpenWebUI).
-
-⚠️ DIAGNOSTIC : logging détaillé de chaque ligne SSE reçue d'OpenWebUI.
-    À réduire après analyse.
+Cela reproduit le cycle tool_call standard de l'API OpenAI, avec streaming
+en temps réel de la réflexion et du contenu vers le frontend.
 """
 import os
 import json
@@ -28,7 +29,6 @@ from api.dependencies import verify_service_key
 load_dotenv()
 
 logger = logging.getLogger("stravbike.chat_proxy")
-logging.basicConfig(level=logging.DEBUG)
 
 router = APIRouter()
 
@@ -41,14 +41,205 @@ OPENWEBUI_TOOL_IDS = [
     if tid.strip()
 ]
 
+# Clé de service pour appeler l'API stravbike (même que l'outil OpenWebUI)
+STRAVBIKE_SERVICE_KEY = os.getenv("STRAVBIKE_SERVICE_KEY", "")
+STRAVBIKE_API_BASE = os.getenv("STRAVBIKE_API_BASE", "http://localhost:2024/api")
+
+# Nombre max d'itérations tool_call (sécurité)
+MAX_TOOL_ITERATIONS = 5
+
 
 class ChatMessage(BaseModel):
     message: str
 
 
+# ── Mapping tool → endpoint stravbike ─────────────────────────────────
+# Les tools sont définis dans openwebui_tools/stravbike_tool.py
+# Le proxy les exécute directement via HTTP, sans passer par OpenWebUI.
+
+async def execute_tool(function_name: str, arguments: dict) -> str:
+    """Exécute un tool stravbike en appellant l'API locale."""
+    headers = {"X-API-Key": STRAVBIKE_SERVICE_KEY}
+
+    async with httpx.AsyncClient() as client:
+        if function_name == "get_athlete_profile":
+            resp = await client.get(f"{STRAVBIKE_API_BASE}/athlete", headers=headers, timeout=10)
+            return resp.text
+
+        elif function_name == "get_week_calendar":
+            resp = await client.get(
+                f"{STRAVBIKE_API_BASE}/calendar/week",
+                params={"start_date": arguments.get("start_date", "")},
+                headers=headers,
+                timeout=10,
+            )
+            return resp.text
+
+        elif function_name == "get_activity_detail":
+            resp = await client.get(
+                f"{STRAVBIKE_API_BASE}/activities/{arguments.get('activity_id', '')}",
+                headers=headers,
+                timeout=10,
+            )
+            return resp.text
+
+        elif function_name == "get_competitions":
+            resp = await client.get(f"{STRAVBIKE_API_BASE}/competitions", headers=headers, timeout=10)
+            return resp.text
+
+        elif function_name == "get_planned_sessions":
+            resp = await client.get(
+                f"{STRAVBIKE_API_BASE}/sessions",
+                params={"week": arguments.get("week", "")},
+                headers=headers,
+                timeout=10,
+            )
+            return resp.text
+
+        elif function_name == "add_coach_comment":
+            resp = await client.post(
+                f"{STRAVBIKE_API_BASE}/comments",
+                json={
+                    "activity_id": arguments.get("activity_id"),
+                    "comment": arguments.get("comment", ""),
+                },
+                headers=headers,
+                timeout=30,
+            )
+            return resp.text
+
+        elif function_name == "sync_latest_activities":
+            resp = await client.post(
+                f"{STRAVBIKE_API_BASE}/activities/refresh",
+                headers=headers,
+                timeout=30,
+            )
+            return resp.text
+
+        else:
+            return f"Erreur: tool '{function_name}' non reconnu par le proxy."
+
+
+# ── Helper : stream une requête OpenWebUI et forward au frontend ──────
+
+async def stream_openwebui_response(
+    client: httpx.AsyncClient,
+    payload: dict,
+    headers: dict,
+):
+    """
+    Envoie une requête streaming à OpenWebUI et yield les events SSE.
+
+    Yields:
+        ("content", text)       — contenu à forwarder au frontend
+        ("reasoning", text)     — reasoning à forwarder au frontend
+        ("tool_call", chunk)    — chunk contenant tool_calls (à collecter)
+        ("finish", reason)      — finish_reason du stream
+        ("done",)               — stream terminé ([DONE])
+        ("error", message)      — erreur
+
+    Returns aussi l'assistant message complet (content + tool_calls) pour
+    construire le messages du prochain tour.
+    """
+    accumulated_content = ""
+    accumulated_reasoning = ""
+    tool_calls_acc = {}  # index → {"id": ..., "function": {"name": ..., "arguments": ""}}
+    finish_reason = None
+
+    async with client.stream(
+        "POST",
+        f"{OPENWEBUI_BASE_URL}/api/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=120,
+    ) as resp:
+        logger.info("  HTTP status: %s", resp.status_code)
+
+        if resp.status_code != 200:
+            body = await resp.aread()
+            err = body.decode("utf-8", "replace")
+            logger.error("  ERROR body: %s", err[:500])
+            yield ("error", f"OpenWebUI returned {resp.status_code}: {err[:200]}")
+            return
+
+        async for line in resp.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+
+            data = line[6:].strip()
+
+            if data == "[DONE]":
+                yield ("done",)
+                break
+
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                logger.warning("  JSON decode failed: %s", data[:200])
+                continue
+
+            choices = chunk.get("choices", [])
+            if not choices:
+                # Peut être un event OpenWebUI (status, etc.)
+                logger.debug("  non-choices chunk: %s", list(chunk.keys()))
+                continue
+
+            choice = choices[0]
+            delta = choice.get("delta", {})
+            fr = choice.get("finish_reason")
+
+            # Content
+            content = delta.get("content", "")
+            if content:
+                accumulated_content += content
+                yield ("content", content)
+
+            # Reasoning
+            reasoning = delta.get("reasoning", "")
+            if reasoning:
+                accumulated_reasoning += reasoning
+                yield ("reasoning", reasoning)
+
+            # Tool calls
+            delta_tc = delta.get("tool_calls")
+            if delta_tc:
+                for tc in delta_tc:
+                    idx = tc.get("index", 0)
+                    if idx not in tool_calls_acc:
+                        tool_calls_acc[idx] = {
+                            "id": tc.get("id", ""),
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    fn = tc.get("function", {})
+                    if fn.get("name"):
+                        tool_calls_acc[idx]["function"]["name"] = fn["name"]
+                    if fn.get("arguments"):
+                        tool_calls_acc[idx]["function"]["arguments"] += fn["arguments"]
+                yield ("tool_call", delta_tc)
+
+            # Finish reason
+            if fr:
+                finish_reason = fr
+                logger.info("  finish_reason: %s", fr)
+
+    # Construire l'assistant message pour le prochain tour
+    assistant_msg = {"role": "assistant", "content": accumulated_content or ""}
+    if accumulated_reasoning:
+        assistant_msg["reasoning"] = accumulated_reasoning
+    if tool_calls_acc:
+        assistant_msg["tool_calls"] = [tool_calls_acc[i] for i in sorted(tool_calls_acc.keys())]
+
+    # Stocker pour le caller
+    stream_openwebui_response._last_assistant_msg = assistant_msg
+    stream_openwebui_response._last_finish_reason = finish_reason
+
+
+# ── Endpoint principal ────────────────────────────────────────────────
+
 @router.post("/")
 async def chat_endpoint(msg: ChatMessage):
-    """Proxy streaming vers OpenWebUI (modèle + tool stravbike)."""
+    """Proxy streaming vers OpenWebUI avec boucle tool_call native."""
 
     # Vérifier que la config est en place
     if not OPENWEBUI_API_KEY:
@@ -72,123 +263,101 @@ async def chat_endpoint(msg: ChatMessage):
         "Content-Type": "application/json",
     }
 
-    # chat_id préfixé "local:" → event_emitter activé mais écritures DB skipées
-    # id (message_id) → requis avec chat_id pour que event_emitter soit non-None
-    chat_id = f"local:{uuid.uuid4()}"
-    message_id = str(uuid.uuid4())
+    # Messages initial — grossi au fil des itérations tool_call
+    messages = [{"role": "user", "content": msg.message}]
 
-    payload = {
+    # Payload de base (sans chat_id/id → fallback streaming path)
+    base_payload = {
         "model": OPENWEBUI_MODEL,
-        "messages": [{"role": "user", "content": msg.message}],
         "stream": True,
         "tool_ids": OPENWEBUI_TOOL_IDS,
-        "chat_id": chat_id,
-        "id": message_id,
     }
 
     logger.info("===== PROXY CHAT REQUEST =====")
     logger.info("  message: %s", msg.message)
-    logger.info("  chat_id: %s", chat_id)
-    logger.info("  message_id: %s", message_id)
     logger.info("  tool_ids: %s", OPENWEBUI_TOOL_IDS)
     logger.info("  model: %s", OPENWEBUI_MODEL)
-    logger.info("  url: %s/api/chat/completions", OPENWEBUI_BASE_URL)
-
-    line_count = 0
-    content_chunks_sent = 0
-    tool_call_chunks_seen = 0
-    done_markers_seen = 0
 
     async def event_stream():
-        nonlocal line_count, content_chunks_sent, tool_call_chunks_seen, done_markers_seen
+        iteration = 0
         try:
             async with httpx.AsyncClient() as client:
-                async with client.stream(
-                    "POST",
-                    f"{OPENWEBUI_BASE_URL}/api/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=120,
-                ) as resp:
-                    logger.info("  HTTP status: %s", resp.status_code)
-                    logger.info("  response headers: %s", dict(resp.headers))
+                while iteration < MAX_TOOL_ITERATIONS:
+                    iteration += 1
+                    logger.info("─── iteration %d ───", iteration)
 
-                    if resp.status_code != 200:
-                        body = await resp.aread()
-                        logger.error("  ERROR body: %s", body.decode('utf-8', 'replace'))
-                        yield f"data: {json.dumps({'error': f'OpenWebUI returned {resp.status_code}'})}\n\n"
-                        return
+                    payload = {**base_payload, "messages": messages}
 
-                    async for line in resp.aiter_lines():
-                        line_count += 1
+                    # Stream cette itération
+                    async for event in stream_openwebui_response(client, payload, headers):
+                        etype = event[0]
 
-                        # Log EVERY raw line (truncated to 500 chars)
-                        raw_preview = line[:500]
-                        logger.debug("  [line %d] raw: %s", line_count, raw_preview)
+                        if etype == "content":
+                            yield f"data: {json.dumps({'content': event[1]})}\n\n"
 
-                        # Log non-SSE lines (could be errors, blank lines, etc.)
-                        if not line.startswith("data: "):
-                            if line.strip():
-                                logger.warning("  [line %d] non-SSE content: %s", line_count, raw_preview)
-                            continue
+                        elif etype == "reasoning":
+                            yield f"data: {json.dumps({'reasoning': event[1]})}\n\n"
 
-                        data = line[6:]
+                        elif etype == "error":
+                            yield f"data: {json.dumps({'error': event[1]})}\n\n"
+                            return
 
-                        if data.strip() == "[DONE]":
-                            done_markers_seen += 1
-                            logger.info("  [line %d] [DONE] marker (count=%d)", line_count, done_markers_seen)
-                            yield "data: [DONE]\n\n"
-                            break
+                        elif etype == "done":
+                            # Stream terminé pour cette itération
+                            pass
+
+                    # Récupérer l'assistant message et le finish_reason
+                    assistant_msg = stream_openwebui_response._last_assistant_msg
+                    finish_reason = stream_openwebui_response._last_finish_reason
+
+                    logger.info("  finish_reason: %s", finish_reason)
+                    logger.info("  has tool_calls: %s", bool(assistant_msg.get("tool_calls")))
+
+                    # Si pas de tool_calls, on a la réponse finale
+                    if not assistant_msg.get("tool_calls") or finish_reason != "tool_calls":
+                        logger.info("  → pas de tool_calls, réponse finale")
+                        break
+
+                    # ── Exécuter les tools ──────────────────────────────
+                    tool_calls = assistant_msg["tool_calls"]
+                    logger.info("  → %d tool_call(s) à exécuter", len(tool_calls))
+
+                    # Ajouter l'assistant message (avec tool_calls) au messages
+                    messages.append(assistant_msg)
+
+                    # Exécuter chaque tool et ajouter les résultats
+                    for tc in tool_calls:
+                        fn_name = tc["function"]["name"]
+                        try:
+                            fn_args = json.loads(tc["function"]["arguments"])
+                        except (json.JSONDecodeError, TypeError):
+                            fn_args = {}
+
+                        logger.info("  → executing: %s(%s)", fn_name, fn_args)
+
+                        # Notifier le frontend qu'un tool s'exécute
+                        yield f"data: {json.dumps({'tool_status': f'Exécution: {fn_name}(...)'})}\n\n"
 
                         try:
-                            chunk = json.loads(data)
-                        except json.JSONDecodeError:
-                            logger.warning("  [line %d] JSON decode failed: %s", line_count, data[:200])
-                            continue
+                            result = await execute_tool(fn_name, fn_args)
+                            logger.info("  ← result: %s...", result[:200])
+                        except Exception as e:
+                            result = f"Erreur lors de l'exécution de {fn_name}: {e}"
+                            logger.error("  ← error: %s", result)
 
-                        # Log the full chunk structure (keys, finish_reason, tool_calls)
-                        choices = chunk.get("choices", [])
-                        if choices:
-                            choice = choices[0]
-                            delta = choice.get("delta", {})
-                            finish_reason = choice.get("finish_reason")
+                        # Ajouter le résultat au format OpenAI tool message
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.get("id", ""),
+                            "content": result,
+                        })
 
-                            # Log finish_reason
-                            if finish_reason:
-                                logger.info("  [line %d] finish_reason: %s", line_count, finish_reason)
+                    # La boucle while va renvoyer à OpenWebUI avec les résultats
+                    logger.info("  → re-requesting OpenWebUI with tool results")
 
-                            # Log tool_calls in delta
-                            delta_tool_calls = delta.get("tool_calls")
-                            if delta_tool_calls:
-                                tool_call_chunks_seen += 1
-                                logger.info("  [line %d] delta.tool_calls: %s",
-                                            line_count, json.dumps(delta_tool_calls, ensure_ascii=False)[:500])
-
-                            # Log content
-                            content = delta.get("content", "")
-                            if content:
-                                content_chunks_sent += 1
-                                if content_chunks_sent <= 3:
-                                    logger.info("  [line %d] delta.content (first chunks): %s",
-                                                line_count, content[:200])
-                                yield f"data: {json.dumps({'content': content})}\n\n"
-
-                            # Log reasoning if present
-                            reasoning = delta.get("reasoning")
-                            if reasoning:
-                                logger.debug("  [line %d] delta.reasoning: %s", line_count, reasoning[:200])
-
-                        # Log non-choices structure (e.g. OpenWebUI event objects)
-                        if not choices:
-                            logger.info("  [line %d] non-choices chunk keys: %s",
-                                        line_count, list(chunk.keys()))
-
-                    logger.info("===== PROXY CHAT SUMMARY =====")
-                    logger.info("  total lines: %d", line_count)
-                    logger.info("  content chunks sent: %d", content_chunks_sent)
-                    logger.info("  tool_call chunks seen: %d", tool_call_chunks_seen)
-                    logger.info("  [DONE] markers: %d", done_markers_seen)
-                    logger.info("===== END SUMMARY =====")
+                if iteration >= MAX_TOOL_ITERATIONS:
+                    logger.warning("  → max iterations reached (%d)", MAX_TOOL_ITERATIONS)
+                    yield f"data: {json.dumps({'error': 'Limite d itérations tool_call atteinte'})}\n\n"
 
         except httpx.ConnectError:
             logger.error("ConnectError to %s", OPENWEBUI_BASE_URL)
@@ -196,5 +365,8 @@ async def chat_endpoint(msg: ChatMessage):
         except Exception as e:
             logger.exception("Unexpected error in event_stream")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        yield "data: [DONE]\n\n"
+        logger.info("===== PROXY CHAT END =====")
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
