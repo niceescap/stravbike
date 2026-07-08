@@ -1,29 +1,26 @@
 """
-Proxy chat → OpenWebUI avec boucle tool_call native.
+Proxy chat → OpenWebUI avec boucle tool_call native + mémoire de conversation.
 
 Architecture :
-  1. Le proxy envoie la requête à OpenWebUI AVEC tool_ids mais SANS chat_id/id.
+  1. Le frontend envoie l'historique complet de la conversation (messages[]).
+  2. Le proxy forward cet historique à OpenWebUI AVEC tool_ids mais SANS chat_id/id.
      → event_emitter = None → fallback streaming path → raw LLM SSE transmis tel quel.
-     → Le LLM reçoit le paramètre `tools` (format OpenAI) et peut émettre des tool_calls.
-  2. Le proxy stream le contenu + reasoning au frontend en temps réel (SSE).
-  3. Le proxy collecte les tool_calls dans le flux SSE.
-  4. Quand le stream se termine avec finish_reason="tool_calls", le proxy exécute
+  3. Le proxy stream le contenu + reasoning au frontend en temps réel (SSE).
+  4. Le proxy collecte les tool_calls dans le flux SSE.
+  5. Quand le stream se termine avec finish_reason="tool_calls", le proxy exécute
      les tools localement (appels HTTP vers l'API stravbike).
-  5. Le proxy construit un nouveau messages avec les résultats et renvoie à OpenWebUI.
-  6. Le proxy stream la nouvelle réponse. Boucle jusqu'à finish_reason="stop".
-
-Cela reproduit le cycle tool_call standard de l'API OpenAI, avec streaming
-en temps réel de la réflexion et du contenu vers le frontend.
+  6. Le proxy construit un nouveau messages avec les résultats et renvoie à OpenWebUI.
+  7. Le proxy stream la nouvelle réponse. Boucle jusqu'à finish_reason="stop".
 """
 import os
 import json
-import uuid
 import logging
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
+from typing import Optional
 from api.dependencies import verify_service_key
 
 load_dotenv()
@@ -49,13 +46,13 @@ STRAVBIKE_API_BASE = os.getenv("STRAVBIKE_API_BASE", "http://localhost:2024/api"
 MAX_TOOL_ITERATIONS = 5
 
 
-class ChatMessage(BaseModel):
-    message: str
+class ChatRequest(BaseModel):
+    """Accepte soit un message simple (legacy) soit un historique complet."""
+    message: Optional[str] = None
+    messages: Optional[list[dict]] = None
 
 
 # ── Mapping tool → endpoint stravbike ─────────────────────────────────
-# Les tools sont définis dans openwebui_tools/stravbike_tool.py
-# Le proxy les exécute directement via HTTP, sans passer par OpenWebUI.
 
 async def execute_tool(function_name: str, arguments: dict) -> str:
     """Exécute un tool stravbike en appellant l'API locale."""
@@ -138,8 +135,7 @@ async def stream_openwebui_response(
         ("done",)               — stream terminé ([DONE])
         ("error", message)      — erreur
 
-    Returns aussi l'assistant message complet (content + tool_calls) pour
-    construire le messages du prochain tour.
+    Stocke l'assistant message complet dans les attributs de la fonction.
     """
     accumulated_content = ""
     accumulated_reasoning = ""
@@ -180,7 +176,6 @@ async def stream_openwebui_response(
 
             choices = chunk.get("choices", [])
             if not choices:
-                # Peut être un event OpenWebUI (status, etc.)
                 logger.debug("  non-choices chunk: %s", list(chunk.keys()))
                 continue
 
@@ -230,7 +225,7 @@ async def stream_openwebui_response(
     if tool_calls_acc:
         assistant_msg["tool_calls"] = [tool_calls_acc[i] for i in sorted(tool_calls_acc.keys())]
 
-    # Stocker pour le caller
+    # Stocker pour le caller via attributs de fonction
     stream_openwebui_response._last_assistant_msg = assistant_msg
     stream_openwebui_response._last_finish_reason = finish_reason
 
@@ -238,8 +233,8 @@ async def stream_openwebui_response(
 # ── Endpoint principal ────────────────────────────────────────────────
 
 @router.post("/")
-async def chat_endpoint(msg: ChatMessage):
-    """Proxy streaming vers OpenWebUI avec boucle tool_call native."""
+async def chat_endpoint(req: ChatRequest):
+    """Proxy streaming vers OpenWebUI avec boucle tool_call native + mémoire."""
 
     # Vérifier que la config est en place
     if not OPENWEBUI_API_KEY:
@@ -258,13 +253,21 @@ async def chat_endpoint(msg: ChatMessage):
             status_code=503,
         )
 
+    # Construire les messages : historique fourni ou message simple (legacy)
+    if req.messages:
+        messages = req.messages
+    elif req.message:
+        messages = [{"role": "user", "content": req.message}]
+    else:
+        return JSONResponse(
+            {"error": "Aucun message fourni (ni 'message' ni 'messages')"},
+            status_code=400,
+        )
+
     headers = {
         "Authorization": f"Bearer {OPENWEBUI_API_KEY}",
         "Content-Type": "application/json",
     }
-
-    # Messages initial — grossi au fil des itérations tool_call
-    messages = [{"role": "user", "content": msg.message}]
 
     # Payload de base (sans chat_id/id → fallback streaming path)
     base_payload = {
@@ -274,7 +277,7 @@ async def chat_endpoint(msg: ChatMessage):
     }
 
     logger.info("===== PROXY CHAT REQUEST =====")
-    logger.info("  message: %s", msg.message)
+    logger.info("  messages count: %d", len(messages))
     logger.info("  tool_ids: %s", OPENWEBUI_TOOL_IDS)
     logger.info("  model: %s", OPENWEBUI_MODEL)
 
@@ -298,12 +301,14 @@ async def chat_endpoint(msg: ChatMessage):
                         elif etype == "reasoning":
                             yield f"data: {json.dumps({'reasoning': event[1]})}\n\n"
 
+                        elif etype == "tool_status":
+                            yield f"data: {json.dumps({'tool_status': event[1]})}\n\n"
+
                         elif etype == "error":
                             yield f"data: {json.dumps({'error': event[1]})}\n\n"
                             return
 
                         elif etype == "done":
-                            # Stream terminé pour cette itération
                             pass
 
                     # Récupérer l'assistant message et le finish_reason
@@ -336,7 +341,7 @@ async def chat_endpoint(msg: ChatMessage):
                         logger.info("  → executing: %s(%s)", fn_name, fn_args)
 
                         # Notifier le frontend qu'un tool s'exécute
-                        yield f"data: {json.dumps({'tool_status': f'Exécution: {fn_name}(...)'})}\n\n"
+                        yield f"data: {json.dumps({'tool_status': f'Exécution: {fn_name}({json.dumps(fn_args, ensure_ascii=False)})'})}\n\n"
 
                         try:
                             result = await execute_tool(fn_name, fn_args)
