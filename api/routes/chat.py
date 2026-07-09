@@ -16,6 +16,7 @@ import os
 import json
 import logging
 import httpx
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
