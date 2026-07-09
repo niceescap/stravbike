@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from typing import Optional
 from api.dependencies import verify_service_key
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env", override=True)
 
 logger = logging.getLogger("stravbike.chat_proxy")
 
