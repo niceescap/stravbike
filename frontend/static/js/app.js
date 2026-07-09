@@ -73,17 +73,11 @@ const App = {
     },
 
     // ── Sync Strava ────────────────────────────────────────
-    async refreshActivities() {
-        const syncIcon = document.getElementById('sync-icon');
-        const syncLabel = document.getElementById('sync-label');
+    async refreshActivities(silent = false) {
         try {
-            this.showToast('↻ Synchronisation…');
-            if (syncIcon) syncIcon.classList.add('spinning');
-            if (syncLabel) syncLabel.textContent = '…';
+            if (!silent) this.showToast('↻ Synchronisation…');
             await this.apiFetch(`${this.API}/activities/refresh`, { method: 'POST' });
-            if (syncIcon) syncIcon.classList.remove('spinning');
-            if (syncLabel) syncLabel.textContent = 'Sync';
-            this.showToast('✓ Activités synchronisées');
+            if (!silent) this.showToast('✓ Activités synchronisées');
             if (typeof Calendar !== 'undefined' && Calendar.calendar) {
                 Calendar.calendar.refetchEvents();
             }
@@ -91,9 +85,7 @@ const App = {
                 this.loadActivities();
             }
         } catch (e) {
-            if (syncIcon) syncIcon.classList.remove('spinning');
-            if (syncLabel) syncLabel.textContent = 'Sync';
-            this.showToast('Erreur synchronisation');
+            if (!silent) this.showToast('Erreur synchronisation');
         }
     },
 
