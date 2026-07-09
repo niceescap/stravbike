@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Header, HTTPException
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 SERVICE_KEY = os.getenv("STRAVBIKE_SERVICE_KEY")
 
