@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS athlete (
     -- Format : {"z1": [0,115], "z2": [115,157], ..., "z7": [322,999]}
     power_zones         JSONB,
 
+    -- Zones de fréquence cardiaque (calculées depuis FC max ou FRC)
+    -- Format : [{"min": 0, "max": 125}, {"min": 125, "max": 156}, ...]
+    heart_rate_zones    JSONB,
+
     -- Statistiques YTD (Year To Date) — mises à jour à chaque refresh
     ytd_distance_km     NUMERIC(8,2),
     ytd_elevation_m     INT,
