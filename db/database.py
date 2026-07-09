@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql:///strava_coach")
 

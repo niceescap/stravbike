@@ -16,6 +16,7 @@ import os
 import json
 import logging
 import httpx
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -23,7 +24,7 @@ from pydantic import BaseModel
 from typing import Optional
 from api.dependencies import verify_service_key
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env", override=True)
 
 logger = logging.getLogger("stravbike.chat_proxy")
 

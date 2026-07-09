@@ -1,10 +1,11 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from stravalib.client import Client
 from sqlalchemy.orm import Session
 from db.models import Athlete, Activity
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 client = Client()
 
