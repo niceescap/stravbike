@@ -18,6 +18,9 @@ const App = {
         if (page === 'activities') this.loadActivities();
         if (page === 'activity_detail') this.loadActivityDetail();
         if (page === 'profile') this.loadProfile();
+
+        // Auto-sync Strava au chargement du calendrier (silencieux, en arrière-plan)
+        if (page === 'calendar') this.refreshActivities(true);
     },
 
     // ── API helpers ────────────────────────────────────────
