@@ -32,7 +32,7 @@ OAUTH_REDIRECT_URI = os.getenv(
     "OAUTH_REDIRECT_URI",
     "https://strava-coach.duckdns.org/auth/callback",
 )
-TOKENS_DIR = Path(os.getenv("TOKENS_DIR", "/data/tokens"))
+TOKENS_DIR = Path(os.getenv("TOKENS_DIR", "/home/nicee/stravbike/data/tokens"))
 
 # ── Constantes Strava ─────────────────────────────────────────────────────
 STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
