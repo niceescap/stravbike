@@ -27,7 +27,7 @@ Voir `.env.example`. Les valeurs réelles sont sur le serveur (non versionnées)
 | `STRAVA_CLIENT_ID`    | ID de l'app Strava                   | `12345` |
 | `STRAVA_CLIENT_SECRET`| Secret de l'app Strava               | `abc...` |
 | `OAUTH_REDIRECT_URI`  | URL de callback HTTPS (via Nginx)    | `https://strava-coach.duckdns.org/auth/callback` |
-| `TOKENS_DIR`          | Répertoire de stockage des tokens    | `/data/tokens` |
+| `TOKENS_DIR`          | Répertoire de stockage des tokens    | `/home/nicee/stravbike/data/tokens` |
 
 ## Sortie
 
