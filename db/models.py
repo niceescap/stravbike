@@ -28,6 +28,11 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Niveau de soutien — détermine le modèle LLM alloué
+    # 'free' → modèles gratuits | 'supporter' → modèles intermédiaires | 'donor' → modèles premium
+    tier = Column(String(20), nullable=False, default="free")
+    llm_model = Column(String(100), nullable=True)  # Modèle OpenRouter alloué (ex: "openai/gpt-4o")
+
     # Relations
     athletes = relationship("Athlete", back_populates="owner", cascade="all, delete-orphan")
     shared_athletes = relationship(
