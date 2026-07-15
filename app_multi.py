@@ -720,7 +720,11 @@ async def api_get_activity_streams(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    """Retourne les streams (courbes) d'une activité depuis la DB."""
+    """Retourne les streams (courbes) d'une activité.
+    Si non présents en DB, les fetch depuis Strava et les stocke.
+    """
+    from services.strava_client import get_strava_client
+
     athlete = get_user_athlete(db, user)
     if not athlete:
         raise HTTPException(status_code=404, detail="No athlete found")
@@ -732,13 +736,55 @@ async def api_get_activity_streams(
     if not act:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # Les streams sont stockés dans Activity.streams_json
-    if not act.streams_json:
-        return {"activity_id": activity_id, "streams": {}, "message": "Aucun stream disponible"}
+    # Déjà en DB ?
+    if act.streams_json:
+        return {
+            "activity_id": activity_id,
+            "streams": act.streams_json,
+        }
+
+    # Fetch depuis Strava
+    STREAM_TYPES = ["time", "watts", "heartrate", "velocity_smooth", "cadence", "grade_smooth"]
+    MAX_POINTS = 300
+
+    def _downsample(values: list, target: int = MAX_POINTS) -> list:
+        if not values or len(values) <= target:
+            return values
+        stride = len(values) / target
+        return [values[int(i * stride)] for i in range(target)]
+
+    try:
+        strava_client = get_strava_client(db, athlete.id)
+        strava_streams = strava_client.get_activity_streams(
+            act.strava_id,
+            types=STREAM_TYPES,
+            resolution="medium",
+        )
+    except Exception as e:
+        return {
+            "activity_id": activity_id,
+            "streams": {},
+            "error": str(e),
+        }
+
+    result = {}
+    for st in STREAM_TYPES:
+        stream = strava_streams.get(st)
+        if stream and stream.data:
+            result[st] = _downsample(list(stream.data))
+
+    # Time axis in minutes
+    if "time" in result and result["time"]:
+        result["time_min"] = [round(t / 60.0, 2) for t in result["time"]]
+
+    # Stocker en DB
+    if result:
+        act.streams_json = result
+        db.commit()
 
     return {
         "activity_id": activity_id,
-        "streams": act.streams_json,
+        "streams": result,
     }
 
 
