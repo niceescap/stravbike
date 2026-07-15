@@ -213,3 +213,43 @@ LLM_DONOR_DEFAULT=openai/gpt-4o
 - Les tokens ne sont pas chiffrés en DB (à faire en prod)
 - Pas de webhook Strava pour les mises à jour automatiques (polling manuel/cron)
 - L'ancien `ingest_activities.py` (mono) coexiste — ne pas le confondre avec `ingest_activities_multi.py`
+
+## Frontend multi-utilisateur
+
+L'app `app_multi.py` (port 2025) sert les pages HTML avec authentification par session cookie.
+
+### Pages
+
+| Route | Page | Description |
+|---|---|---|
+| `GET /login` | Formulaire email | Login sans mot de passe (beta) |
+| `POST /login` | Submit email | Crée la session cookie signée HMAC |
+| `GET /logout` | Déconnexion | Supprime le cookie |
+| `GET /calendar` | Calendrier | Clone strava-coach, auto-refresh à l'ouverture |
+| `GET /activities` | Liste activités | Toutes les activités de l'athlète |
+| `GET /chat` | Chat IA | Utilise le modèle LLM alloué (affiché en badge) |
+| `GET /profile` | Profil utilisateur | Tier, modèle, bouton PayPal, infos compte |
+
+### Démarrage
+
+```bash
+uvicorn app_multi:app --host 0.0.0.0 --port 2025
+```
+
+Ou service systemd :
+```ini
+# /etc/systemd/system/stravbike-multi-web.service
+[Unit]
+Description=stravbike Multi-User Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=nicee
+WorkingDirectory=/home/nicee/stravbike
+ExecStart=/home/nicee/stravbike/.venv/bin/uvicorn app_multi:app --host 0.0.0.0 --port 2025
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
