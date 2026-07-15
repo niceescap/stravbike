@@ -259,9 +259,9 @@ async def chat_page(request: Request, user: User = Depends(require_user), db: Se
     tier_info = get_tier_for_user(db, user.id)
 
     return templates.TemplateResponse(
+        request,
         "pages/chat.html",
         {
-            "request": request,
             "service_key": SERVICE_KEY,
             "page": "chat",
             "current_user": user,
