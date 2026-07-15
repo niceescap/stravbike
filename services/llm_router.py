@@ -71,8 +71,8 @@ LLM_REGISTRY = {
             "deepseek/deepseek-chat:free",                 # DeepSeek Chat — alternatif solide
             "meta-llama/llama-3.3-70b-instruct:free",      # Llama 3.3 70B — puissant
         ],
-        "label": "Supporter",
-        "description": "Modèles intermédiaires — meilleure qualité de coaching",
+        "label": "Contributeur",
+        "description": "Modèle attribué aux contributeurs — meilleure qualité de coaching",
     },
 
     # ── Niveau DONOR (contribution généreuse) ──
