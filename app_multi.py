@@ -42,6 +42,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 from db.database import SessionLocal, init_db
 from db.models import User, Athlete
+from services.llm_handler import stream_chat
 
 app = FastAPI(title="Stravbike Multi-User")
 
