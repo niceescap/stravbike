@@ -167,7 +167,7 @@ const Calendar = {
             html += `<div><div class="comment-input-wrap">
                 <textarea id="new-comment" placeholder="Ajouter un commentaire…"></textarea>
                 <div class="comment-input-footer">
-                    <select class="role-select" id="comment-role"><option value="coach">Coach</option><option value="athlete">Athlète</option></select>
+                    <select class="role-select" id="comment-role"><option value="visiteur" selected>Visiteur</option><option value="athlète">Athlète</option></select>
                     <button class="btn-send" onclick="Calendar._addComment(${entityId}, '${entityType}')">Envoyer</button>
                 </div>
             </div></div>`;
