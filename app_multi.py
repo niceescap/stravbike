@@ -152,9 +152,9 @@ def on_startup():
 async def login_page(request: Request, error: Optional[str] = None):
     """Page de login — formulaire email."""
     return templates.TemplateResponse(
+        request,
         "login.html",
         {
-            "request": request,
             "error": error,
             "service_key": SERVICE_KEY,
         },
