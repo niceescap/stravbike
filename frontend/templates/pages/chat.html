@@ -1,13 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}Chat — Coach Strava{% endblock %}
+{% block title %}Chat — Stravbike{% endblock %}
 
 {% block content %}
 <div id="chat-container">
+    <!-- Modèle alloué — badge en haut -->
+    <div id="chat-model-badge">
+        <span class="model-dot"></span>
+        <span class="model-label">Modèle :</span>
+        <code>{{ llm_model }}</code>
+        <span class="model-tier">{{ llm_tier }}</span>
+    </div>
+
     <div id="chat-messages">
         <div class="chat-welcome">
-            <h2>💬 Coach Strava</h2>
+            <h2>💬 Coach IA</h2>
             <p>Discute avec ton coach IA. Il a accès à toutes tes activités, séances planifiées et compétitions.</p>
+            <p class="welcome-model">Modèle actif : <code>{{ llm_model }}</code></p>
         </div>
     </div>
     <div id="chat-input-wrap">
@@ -15,6 +24,48 @@
         <button id="chat-send" onclick="Chat.send()">Envoyer</button>
     </div>
 </div>
+
+<style>
+    #chat-model-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: #1a1d24;
+        border-bottom: 1px solid #2a2d35;
+        font-size: 13px;
+        color: #aaa;
+    }
+    .model-dot {
+        width: 8px; height: 8px;
+        background: #4caf50;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+    .model-label { color: #888; }
+    #chat-model-badge code {
+        color: #FF6B35;
+        font-size: 12px;
+        font-family: 'Courier New', monospace;
+    }
+    .model-tier {
+        margin-left: auto;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: rgba(255,107,53,0.12);
+        color: #FF6B35;
+    }
+    .welcome-model { margin-top: 8px; font-size: 12px; color: #666; }
+    .welcome-model code { color: #FF6B35; font-size: 12px; }
+</style>
 {% endblock %}
 
 {% block scripts %}
