@@ -434,3 +434,93 @@ def add_comment(
     db.add(new_comment)
     db.commit()
     return {"status": "ok", "comment_id": new_comment.id}
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Routes — LLM Tier System (niveaux de modèles par utilisateur)
+# ────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/llm/tiers", dependencies=[Depends(verify_service_key)])
+def list_llm_tiers():
+    """
+    Liste tous les niveaux de soutien et les modèles disponibles.
+
+    Réponse :
+    {
+        "free": { "label": "Gratuit", "description": "...", "default_model": "...", "available_models": [...], "model_count": 4 },
+        "supporter": { ... },
+        "donor": { ... }
+    }
+    """
+    from services.llm_router import get_all_tiers_info
+    return get_all_tiers_info()
+
+
+@app.get("/api/users/{user_id}/llm", dependencies=[Depends(verify_service_key)])
+def get_user_llm(user_id: int, db: Session = Depends(get_db)):
+    """
+    Récupère le niveau et le modèle LLM d'un utilisateur.
+
+    Réponse :
+    {
+        "user_id": 1,
+        "tier": "free",
+        "label": "Gratuit",
+        "description": "...",
+        "current_model": "nepothos/nemotron-mini-4b-instruct:free",
+        "available_models": ["...", "..."],
+        "can_choose": true
+    }
+    """
+    from services.llm_router import get_tier_for_user
+    return {
+        "user_id": user_id,
+        **get_tier_for_user(db, user_id),
+    }
+
+
+@app.put("/api/users/{user_id}/llm/tier", dependencies=[Depends(verify_service_key)])
+def set_user_tier_api(
+    user_id: int,
+    tier: str = Query(..., description="Niveau: free, supporter, donor"),
+    model: Optional[str] = Query(None, description="Modèle spécifique (optionnel)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Change le niveau de soutien d'un utilisateur.
+
+    Query params :
+        tier  : free | supporter | donor
+        model : ID OpenRouter du modèle (optionnel, doit être dans le niveau)
+
+    Réponse :
+    { "success": true, "user_id": 1, "old_tier": "free", "new_tier": "supporter", "model": "..." }
+    """
+    from services.llm_router import set_user_tier as svc_set_tier
+    try:
+        result = svc_set_tier(db, user_id, tier, model_id=model)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/users/{user_id}/llm/model", dependencies=[Depends(verify_service_key)])
+def set_user_model_api(
+    user_id: int,
+    model: str = Query(..., description="ID OpenRouter du modèle"),
+    db: Session = Depends(get_db),
+):
+    """
+    Attribue un modèle LLM spécifique à un utilisateur.
+
+    Le modèle doit être disponible pour le niveau actuel de l'utilisateur.
+
+    Réponse :
+    { "success": true, "user_id": 1, "model": "openai/gpt-4o", "tier": "donor" }
+    """
+    from services.llm_router import set_user_model as svc_set_model
+    try:
+        result = svc_set_model(db, user_id, model)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
