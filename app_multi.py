@@ -238,9 +238,9 @@ async def activities_page(request: Request, user: User = Depends(require_user), 
     """Page liste des activités."""
     athlete = get_user_athlete(db, user)
     return templates.TemplateResponse(
+        request,
         "pages/activities.html",
         {
-            "request": request,
             "service_key": SERVICE_KEY,
             "page": "activities",
             "current_user": user,
