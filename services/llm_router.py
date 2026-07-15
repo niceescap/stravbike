@@ -129,7 +129,7 @@ def get_model_for_user(db: Session, user_id: int) -> str:
 
     # Sinon → modèle par défaut de son niveau
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
-    return tier_config["default"]
+    return OPENWEBUI_MODEL or tier_config["default"]
 
 
 def get_tier_for_user(db: Session, user_id: int) -> dict:
