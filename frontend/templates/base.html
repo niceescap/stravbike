@@ -17,10 +17,10 @@
 <header id="header">
     <div id="header-left">
         <a href="/calendar" id="logo">STRAV<span>BIKE</span></a>
-        {% if current_user and current_athlete %}
+        {% if current_user_dict and current_athlete_dict %}
         <div id="athlete-badge" style="display:flex;align-items:center;gap:8px;">
-            <div class="avatar" id="athlete-initials">{{ (current_athlete.firstname or '?')[:1] }}{{ (current_athlete.lastname or '?')[:1] }}</div>
-            <span id="athlete-name-text">{{ current_athlete.firstname }} {{ current_athlete.lastname }}</span>
+            <div class="avatar" id="athlete-initials">{{ current_athlete_dict.firstname[:1] }}{{ current_athlete_dict.lastname[:1] }}</div>
+            <span id="athlete-name-text">{{ current_athlete_dict.firstname }} {{ current_athlete_dict.lastname }}</span>
         </div>
         {% endif %}
     </div>
