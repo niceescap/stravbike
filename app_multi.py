@@ -337,6 +337,32 @@ async def chat_page(request: Request, user: User = Depends(require_user), db: Se
     )
 
 
+@app.post("/api/chat/")
+async def api_chat(
+    payload: dict = Body(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Authenticated streaming chat; identity and model come from the session."""
+    messages = payload.get("messages") if isinstance(payload, dict) else None
+    if not isinstance(messages, list):
+        message = payload.get("message") if isinstance(payload, dict) else None
+        messages = [{"role": "user", "content": message}] if message else []
+    if not messages:
+        raise HTTPException(status_code=400, detail="Aucun message fourni")
+
+    athlete = get_user_athlete(db, user)
+    return StreamingResponse(
+        stream_chat(messages, user, athlete),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/profile", response_class=HTMLResponse)
 async def profile_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     """Page profil — tier, modèle, bouton PayPal."""
