@@ -689,31 +689,48 @@ async def api_add_comment(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    """Ajoute un commentaire à une activité."""
+    """Ajoute un commentaire à une activité ou une séance."""
     athlete = get_user_athlete(db, user)
     if not athlete:
         raise HTTPException(status_code=404, detail="No athlete found")
 
     body = await request.json()
-    activity_id = int(body.get("activity_id", 0))
-    comment = body.get("comment", "").strip()
-    author_role = body.get("author_role", "visiteur")  # Default = visiteur
+    activity_id = body.get("activity_id")
+    session_id = body.get("session_id")
+    comment = str(body.get("comment", "")).strip()
+    author_role = str(body.get("author_role", "visiteur"))
 
     if not comment:
         raise HTTPException(status_code=400, detail="Comment is required")
 
-    act = (
-        db.query(Activity)
-        .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
-        .first()
-    )
-    if not act:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    # Déterminer l'activity_id cible
+    target_activity_id = None
+    if activity_id:
+        # Vérifier que l'activité appartient à l'athlète
+        act = (
+            db.query(Activity)
+            .filter(Activity.id == int(activity_id), Activity.athlete_id == athlete.id)
+            .first()
+        )
+        if not act:
+            raise HTTPException(status_code=404, detail="Activity not found")
+        target_activity_id = act.id
+    elif session_id:
+        # Récupérer l'activité liée à la séance si elle existe
+        session = (
+            db.query(PlannedSession)
+            .filter(PlannedSession.id == int(session_id), PlannedSession.athlete_id == athlete.id)
+            .first()
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        target_activity_id = session.activity_id  # Peut être None
 
     new_comment = Comment(
         athlete_id=athlete.id,
         user_id=user.id,
-        activity_id=activity_id,
+        activity_id=target_activity_id,
+        session_id=int(session_id) if session_id else None,
         comment=comment,
         author_role=author_role,
     )
