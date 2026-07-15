@@ -27,6 +27,8 @@ from sqlalchemy.orm import Session
 # Charge .env
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
+OPENWEBUI_MODEL = os.getenv("OPENWEBUI_MODEL", "").strip()
+
 from db.models import User
 
 
