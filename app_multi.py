@@ -282,6 +282,37 @@ async def activities_page(request: Request, user: User = Depends(require_user), 
     )
 
 
+@app.get("/activities/{activity_id}", response_class=HTMLResponse)
+async def activity_detail_page(
+    request: Request,
+    activity_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Page détail d'une activité."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete found")
+    act = (
+        db.query(Activity)
+        .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+        .first()
+    )
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return templates.TemplateResponse(
+        request,
+        "pages/activity_detail.html",
+        {
+            "service_key": SERVICE_KEY,
+            "page": "activity_detail",
+            "current_user_dict": _user_to_dict(user),
+            "current_athlete_dict": _athlete_to_dict(athlete),
+            "activity_id": activity_id,
+        },
+    )
+
+
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     """Page chat — utilise le modèle LLM alloué à l'utilisateur."""
