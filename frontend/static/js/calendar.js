@@ -266,7 +266,7 @@ const Calendar = {
 
     async _addComment(entityId, entityType) {
         const text = document.getElementById('new-comment')?.value?.trim();
-        const role = document.getElementById('comment-role')?.value || 'coach';
+        const role = document.getElementById('comment-role')?.value || 'visiteur';
         if (!text) return;
         try {
             await App.apiFetch(`${App.API}/comments/`, {
