@@ -714,6 +714,34 @@ async def api_add_comment(
     return {"status": "ok", "comment_id": new_comment.id}
 
 
+@app.get("/api/activities/{activity_id}/streams")
+async def api_get_activity_streams(
+    activity_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne les streams (courbes) d'une activité depuis la DB."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete found")
+    act = (
+        db.query(Activity)
+        .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+        .first()
+    )
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    # Les streams sont stockés dans Activity.streams_json
+    if not act.streams_json:
+        return {"activity_id": activity_id, "streams": {}, "message": "Aucun stream disponible"}
+
+    return {
+        "activity_id": activity_id,
+        "streams": act.streams_json,
+    }
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Point d'entrée
 # ────────────────────────────────────────────────────────────────────────────
