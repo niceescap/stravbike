@@ -64,7 +64,7 @@
         {% endif %}
         <div class="account-row">
             <span class="label">Membre depuis</span>
-            <span class="value">{{ current_user.created_at.strftime('%d/%m/%Y') if current_user.created_at else '—' }}</span>
+            <span class="value">{{ current_user_dict.created_at[:10] if current_user_dict.created_at else '—' }}</span>
         </div>
     </div>
 
