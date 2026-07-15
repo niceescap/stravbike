@@ -210,7 +210,7 @@ def set_user_model(
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
 
     # Validation : le modèle doit être dans la liste du niveau
-    if model_id not in tier_config["available"]:
+    if model_id != OPENWEBUI_MODEL and model_id not in tier_config["available"]:
         available = ", ".join(tier_config["available"])
         raise ValueError(
             f"Model '{model_id}' is not available for tier '{user.tier}'. "
