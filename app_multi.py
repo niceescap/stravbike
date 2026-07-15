@@ -118,10 +118,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
 
 
 def require_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """Force l'authentification. Redirige vers /login si pas de session."""
+    """Force l'authentification. Lève HTTPException si pas de session."""
     user = get_current_user(request, db)
     if not user:
-        return RedirectResponse(url="/login", status_code=302)
+        raise HTTPException(status_code=302, headers={"Location": "/login"})
     return user
 
 
