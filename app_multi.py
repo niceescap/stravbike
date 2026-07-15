@@ -329,4 +329,4 @@ async def get_current_user_api(user: User = Depends(require_user), db: Session =
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app_multi:app", host="0.0.0.0", port=2025, reload=False)
+    uvicorn.run("app_multi:app", host="0.0.0.0", port=2024, reload=False)
