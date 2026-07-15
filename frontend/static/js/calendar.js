@@ -167,7 +167,7 @@ const Calendar = {
             html += `<div><div class="comment-input-wrap">
                 <textarea id="new-comment" placeholder="Ajouter un commentaire…"></textarea>
                 <div class="comment-input-footer">
-                    <select class="role-select" id="comment-role"><option value="coach">Coach</option><option value="athlete">Athlète</option></select>
+                    <select class="role-select" id="comment-role"><option value="visiteur" selected>Visiteur</option><option value="athlète">Athlète</option></select>
                     <button class="btn-send" onclick="Calendar._addComment(${entityId}, '${entityType}')">Envoyer</button>
                 </div>
             </div></div>`;
@@ -252,11 +252,11 @@ const Calendar = {
             const comments = await App.apiFetch(url);
             if (!comments.length) { listEl.innerHTML = '<p style="color:var(--muted);font-size:12px">Aucun commentaire.</p>'; return; }
             listEl.innerHTML = comments.map(c => {
-                const isCoach = c.author_role === 'coach';
+                const isVisitor = c.author_role === 'visiteur';
                 return `<div class="comment-item">
-                    <div class="comment-avatar ${isCoach ? 'avatar-coach' : 'avatar-athlete'}">${isCoach ? 'C' : 'N'}</div>
+                    <div class="comment-avatar ${isVisitor ? 'avatar-visitor' : 'avatar-athlete'}">${isVisitor ? 'V' : 'A'}</div>
                     <div class="comment-bubble">
-                        <div class="comment-meta">${isCoach ? 'Coach' : 'Nicolas'} · ${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : ''}</div>
+                        <div class="comment-meta">${isVisitor ? 'Visiteur' : 'Athlète'} · ${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : ''}</div>
                         ${c.comment}
                     </div>
                 </div>`;
@@ -266,7 +266,7 @@ const Calendar = {
 
     async _addComment(entityId, entityType) {
         const text = document.getElementById('new-comment')?.value?.trim();
-        const role = document.getElementById('comment-role')?.value || 'coach';
+        const role = document.getElementById('comment-role')?.value || 'visiteur';
         if (!text) return;
         try {
             await App.apiFetch(`${App.API}/comments/`, {

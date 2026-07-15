@@ -1,9 +1,169 @@
 {% extends "base.html" %}
 
-{% block title %}Profil — Coach Strava{% endblock %}
+{% block title %}Profil — Stravbike{% endblock %}
 
 {% block content %}
 <div class="profile-container" id="profile-container">
-    <div class="spinner"></div>
+    <!-- Tier badge -->
+    <div class="tier-card">
+        <div class="tier-header">
+            <div class="tier-icon">
+                {% if tier_info.tier == 'donor' %}💎
+                {% elif tier_info.tier == 'supporter' %}⭐
+                {% else %}🌱{% endif %}
+            </div>
+            <div class="tier-info">
+                <div class="tier-label">{{ tier_info.label }}</div>
+                <div class="tier-desc">{{ tier_info.description }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modèle LLM actuel -->
+    <div class="model-card">
+        <h3>🧠 Modèle LLM alloué</h3>
+        <div class="model-value">{{ tier_info.current_model }}</div>
+        <p class="model-hint">
+            {% if tier_info.tier == 'free' %}
+                Modèle gratuit — passe au niveau <strong>Supporter</strong> pour accéder à Kimi, Mistral Large, etc.
+            {% elif tier_info.tier == 'supporter' %}
+                Modèle intermédiaire — passe au niveau <strong>Donateur</strong> pour GPT-4o, Claude Opus, etc.
+            {% else %}
+                Modèle premium — coaching haute précision.
+            {% endif %}
+        </p>
+    </div>
+
+    <!-- Bouton PayPal -->
+    <div class="paypal-card">
+        <h3>💳 Soutenir le projet</h3>
+        <p>Une contribution débloque des modèles plus performants pour ton coaching IA.</p>
+        <a href="{{ paypal_url }}" target="_blank" class="btn-paypal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M9 4v16"/><path d="M1 10h22"/></svg>
+            Faire un don via PayPal
+        </a>
+        <p class="paypal-hint">Après contribution, contacte l'admin pour mise à niveau de ton niveau.</p>
+    </div>
+
+    <!-- Infos compte -->
+    <div class="account-card">
+        <h3>👤 Compte</h3>
+        <div class="account-row">
+            <span class="label">Email</span>
+            <span class="value">{{ current_user_dict.email }}</span>
+        </div>
+        <div class="account-row">
+            <span class="label">Nom</span>
+            <span class="value">{{ current_user_dict.firstname }} {{ current_user_dict.lastname }}</span>
+        </div>
+        {% if current_athlete %}
+        <div class="account-row">
+            <span class="label">Athlète Strava</span>
+            <span class="value">{{ current_athlete.firstname }} {{ current_athlete.lastname }} (ID: {{ current_athlete.strava_id }})</span>
+        </div>
+        {% endif %}
+        <div class="account-row">
+            <span class="label">Membre depuis</span>
+            <span class="value">{{ current_user_dict.created_at[:10] if current_user_dict.created_at else '—' }}</span>
+        </div>
+    </div>
+
+    <!-- Déconnexion -->
+    <div style="text-align:center; margin-top:24px;">
+        <a href="/logout" class="btn-logout">Se déconnecter</a>
+    </div>
 </div>
+
+<style>
+    .profile-container {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 16px;
+    }
+
+    /* Tier card */
+    .tier-card {
+        background: linear-gradient(135deg, #1a1d24, #22252d);
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+    .tier-header { display: flex; align-items: center; gap: 16px; }
+    .tier-icon { font-size: 36px; }
+    .tier-label {
+        font-size: 18px;
+        font-weight: 700;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .tier-desc { font-size: 13px; color: #999; margin-top: 2px; }
+
+    /* Generic cards */
+    .model-card, .paypal-card, .account-card {
+        background: #1a1d24;
+        border: 1px solid #2a2d35;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+    .model-card h3, .paypal-card h3, .account-card h3 {
+        font-size: 14px;
+        color: #aaa;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+    }
+    .model-value {
+        font-size: 15px;
+        color: #FF6B35;
+        font-family: 'Courier New', monospace;
+        word-break: break-all;
+        margin-bottom: 8px;
+    }
+    .model-hint, .paypal-hint { font-size: 13px; color: #888; line-height: 1.5; }
+
+    /* PayPal button */
+    .btn-paypal {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #0070BA;
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        margin-top: 12px;
+        transition: background 0.2s;
+    }
+    .btn-paypal:hover { background: #005ea6; }
+    .paypal-hint { font-size: 12px; color: #666; margin-top: 8px; }
+
+    /* Account rows */
+    .account-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #222;
+        font-size: 14px;
+    }
+    .account-row:last-child { border-bottom: none; }
+    .account-row .label { color: #888; }
+    .account-row .value { color: #e0e0e0; font-weight: 500; }
+
+    /* Logout */
+    .btn-logout {
+        display: inline-block;
+        color: #f0a0a0;
+        text-decoration: none;
+        font-size: 14px;
+        padding: 8px 16px;
+        border: 1px solid rgba(220,53,69,0.3);
+        border-radius: 6px;
+        transition: background 0.2s;
+    }
+    .btn-logout:hover { background: rgba(220,53,69,0.1); }
+</style>
 {% endblock %}

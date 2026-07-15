@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Coach Strava{% endblock %}</title>
+    <title>{% block title %}Stravbike{% endblock %}</title>
     <meta name="api-key" content="{{ service_key }}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,17 +16,20 @@
 
 <header id="header">
     <div id="header-left">
-        <a href="/calendar" id="logo">COACH <span>STRAVA</span></a>
-        <div id="athlete-badge" style="display:none">
-            <div class="avatar" id="athlete-initials">NS</div>
-            <span id="athlete-name-text">—</span>
+        <a href="/calendar" id="logo">STRAV<span>BIKE</span></a>
+        {% if current_user_dict and current_athlete_dict %}
+        <div id="athlete-badge" style="display:flex;align-items:center;gap:8px;">
+            <div class="avatar" id="athlete-initials">{{ current_athlete_dict.firstname[:1] }}{{ current_athlete_dict.lastname[:1] }}</div>
+            <span id="athlete-name-text">{{ current_athlete_dict.firstname }} {{ current_athlete_dict.lastname }}</span>
         </div>
+        {% endif %}
     </div>
     <nav id="nav">
         <a href="/calendar"   class="nav-link" data-page="calendar">📅 Calendrier</a>
         <a href="/activities" class="nav-link" data-page="activities">🚴 Activités</a>
         <a href="/chat"       class="nav-link" data-page="chat">💬 Chat</a>
         <a href="/profile"    class="nav-link" data-page="profile">⚙️ Profil</a>
+        <a href="/logout"     class="nav-link" style="margin-left:auto;color:#f0a0a0;">🚪</a>
     </nav>
 </header>
 
@@ -35,6 +38,12 @@
 </main>
 
 <div id="toast"></div>
+
+<script>
+    // Injecte les infos utilisateur dans le scope global pour le JS
+    window.__USER__ = {{ current_user_dict | safe if current_user_dict else 'null' }};
+    window.__ATHLETE__ = {{ current_athlete_dict | safe if current_athlete_dict else 'null' }};
+</script>
 
 <script src="/static/js/app.js"></script>
 {% block scripts %}{% endblock %}
