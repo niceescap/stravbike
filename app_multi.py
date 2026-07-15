@@ -171,9 +171,9 @@ async def login_submit(
     user = db.query(User).filter(User.email.ilike(email.strip())).first()
     if not user:
         return templates.TemplateResponse(
+            request,
             "login.html",
             {
-                "request": request,
                 "error": "Aucun compte trouvé avec cet email.",
                 "service_key": SERVICE_KEY,
             },
