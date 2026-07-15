@@ -252,11 +252,11 @@ const Calendar = {
             const comments = await App.apiFetch(url);
             if (!comments.length) { listEl.innerHTML = '<p style="color:var(--muted);font-size:12px">Aucun commentaire.</p>'; return; }
             listEl.innerHTML = comments.map(c => {
-                const isCoach = c.author_role === 'coach';
+                const isVisitor = c.author_role === 'visiteur';
                 return `<div class="comment-item">
-                    <div class="comment-avatar ${isCoach ? 'avatar-coach' : 'avatar-athlete'}">${isCoach ? 'C' : 'N'}</div>
+                    <div class="comment-avatar ${isVisitor ? 'avatar-visitor' : 'avatar-athlete'}">${isVisitor ? 'V' : 'A'}</div>
                     <div class="comment-bubble">
-                        <div class="comment-meta">${isCoach ? 'Coach' : 'Nicolas'} · ${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : ''}</div>
+                        <div class="comment-meta">${isVisitor ? 'Visiteur' : 'Athlète'} · ${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : ''}</div>
                         ${c.comment}
                     </div>
                 </div>`;
