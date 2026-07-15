@@ -27,6 +27,13 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# Chemin pour trouver db/models.py
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from db.models import (
+    User, Athlete, Activity, PlannedSession,
+    Competition, Comment, LLMAnalysis, AthleteSharing,
+)
+
 # ────────────────────────────────────────────────────────────────────────────
 # Setup
 # ────────────────────────────────────────────────────────────────────────────
