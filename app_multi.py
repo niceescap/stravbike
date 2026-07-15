@@ -483,10 +483,10 @@ async def api_get_calendar_week(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    """Retourne les données calendrier pour la semaine demandée."""
+    """Retourne une liste PLATE d'événements calendrier (format attendu par calendar.js)."""
     athlete = get_user_athlete(db, user)
     if not athlete:
-        return {"activities": [], "sessions": [], "competitions": []}
+        return []
 
     try:
         week_start = datetime.strptime(start_date, "%Y-%m-%d").date()
@@ -509,7 +509,7 @@ async def api_get_calendar_week(
         )
         .all()
     )
-    # Séances
+    # Séances planifiées
     sessions = (
         db.query(PlannedSession)
         .filter(
@@ -530,43 +530,99 @@ async def api_get_calendar_week(
         .all()
     )
 
-    return {
-        "start_date": start_date,
-        "end_date": week_end.strftime("%Y-%m-%d"),
-        "activities": [
-            {
-                "id": a.id,
-                "name": a.name,
-                "date": a.start_date_local.strftime("%Y-%m-%d") if a.start_date_local else None,
-                "distance_km": float(a.distance_km) if a.distance_km else None,
-                "moving_time_min": float(a.moving_time_min) if a.moving_time_min else None,
-                "elevation_gain_m": float(a.elevation_gain_m) if a.elevation_gain_m else None,
-                "avg_watts": float(a.avg_watts) if a.avg_watts else None,
-                "tss": float(a.tss) if a.tss else None,
-            }
-            for a in activities
-        ],
-        "planned_sessions": [
-            {
-                "id": s.id,
-                "date": s.session_date.strftime("%Y-%m-%d"),
-                "title": s.title,
-                "description": s.description,
-                "status": s.status,
-                "validated": s.validated,
-            }
-            for s in sessions
-        ],
-        "competitions": [
-            {
-                "id": c.id,
-                "name": c.name,
-                "date": c.competition_date.strftime("%Y-%m-%d"),
-                "objective_level": c.objective_level,
-            }
-            for c in competitions
-        ],
-    }
+    # Format PLAT attendu par calendar.js
+    events = []
+
+    # Activités → événements
+    for a in activities:
+        events.append({
+            "activity_id": a.id,
+            "session_id": None,
+            "competition_id": None,
+            "calendar_date": a.start_date_local.strftime("%Y-%m-%d") if a.start_date_local else None,
+            "session_title": None,
+            "session_description": None,
+            "session_status": None,
+            "session_validated": None,
+            "session_ressenti": None,
+            "activity_name": a.name,
+            "moving_time_min": float(a.moving_time_min) if a.moving_time_min else None,
+            "weighted_avg_watts": float(a.weighted_avg_watts) if a.weighted_avg_watts else None,
+            "avg_heartrate": float(a.avg_heartrate) if a.avg_heartrate else None,
+            "tss": float(a.tss) if a.tss else None,
+            "intensity_factor": float(a.intensity_factor) if a.intensity_factor else None,
+            "competition_name": None,
+            "objective_level": None,
+            "result_rank": None,
+            "badge": "🚴",
+        })
+
+    # Séances → événements
+    for s in sessions:
+        # Badge logic
+        matched_activity = next(
+            (a for a in activities if a.start_date_local and a.start_date_local.date() == s.session_date and s.activity_id == a.id),
+            None
+        )
+        if s.validated is True:
+            badge = "✅"
+        elif s.validated is False:
+            badge = "❌"
+        elif s.session_date < datetime.now().date() and not matched_activity:
+            badge = "❌"
+        elif matched_activity:
+            badge = "🚴"
+        else:
+            badge = "⏳"
+
+        events.append({
+            "activity_id": None,
+            "session_id": s.id,
+            "competition_id": None,
+            "calendar_date": s.session_date.strftime("%Y-%m-%d"),
+            "session_title": s.title,
+            "session_description": s.description,
+            "session_status": s.status,
+            "session_validated": s.validated,
+            "session_ressenti": s.ressenti,
+            "activity_name": None,
+            "moving_time_min": None,
+            "weighted_avg_watts": None,
+            "avg_heartrate": None,
+            "tss": None,
+            "intensity_factor": None,
+            "competition_name": None,
+            "objective_level": None,
+            "result_rank": None,
+            "badge": badge,
+        })
+
+    # Compétitions → événements
+    for c in competitions:
+        badge = "🏆"
+        events.append({
+            "activity_id": None,
+            "session_id": None,
+            "competition_id": c.id,
+            "calendar_date": c.competition_date.strftime("%Y-%m-%d"),
+            "session_title": None,
+            "session_description": None,
+            "session_status": None,
+            "session_validated": None,
+            "session_ressenti": None,
+            "activity_name": None,
+            "moving_time_min": None,
+            "weighted_avg_watts": None,
+            "avg_heartrate": None,
+            "tss": None,
+            "intensity_factor": None,
+            "competition_name": c.name,
+            "objective_level": c.objective_level,
+            "result_rank": c.result_rank,
+            "badge": badge,
+        })
+
+    return events
 
 
 @app.get("/api/comments/")
