@@ -738,10 +738,7 @@ async def api_get_activity_streams(
 
     # Déjà en DB ?
     if act.streams_json:
-        return {
-            "activity_id": activity_id,
-            "streams": act.streams_json,
-        }
+        return act.streams_json
 
     # Fetch depuis Strava
     STREAM_TYPES = ["time", "watts", "heartrate", "velocity_smooth", "cadence", "grade_smooth"]
@@ -762,9 +759,8 @@ async def api_get_activity_streams(
         )
     except Exception as e:
         return {
-            "activity_id": activity_id,
-            "streams": {},
             "error": str(e),
+            "streams": {},
         }
 
     result = {}
@@ -782,10 +778,7 @@ async def api_get_activity_streams(
         act.streams_json = result
         db.commit()
 
-    return {
-        "activity_id": activity_id,
-        "streams": result,
-    }
+    return result
 
 
 # ────────────────────────────────────────────────────────────────────────────
