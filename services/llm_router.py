@@ -151,7 +151,7 @@ def get_tier_for_user(db: Session, user_id: int) -> dict:
         raise ValueError(f"User {user_id} not found")
 
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
-    current_model = user.llm_model or tier_config["default"]
+    current_model = user.llm_model or OPENWEBUI_MODEL or tier_config["default"]
 
     return {
         "tier": user.tier,
