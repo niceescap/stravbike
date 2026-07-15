@@ -222,9 +222,9 @@ async def calendar_page(request: Request, user: User = Depends(require_user), db
     """Page calendrier — clone de la version mono, avec contexte utilisateur."""
     athlete = get_user_athlete(db, user)
     return templates.TemplateResponse(
+        request,
         "pages/calendar.html",
         {
-            "request": request,
             "service_key": SERVICE_KEY,
             "page": "calendar",
             "current_user": user,
