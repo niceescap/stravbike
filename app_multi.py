@@ -145,6 +145,32 @@ def on_startup():
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Helpers de sérialisation (objets SQLAlchemy → dicts JSON-safe)
+# ────────────────────────────────────────────────────────────────────────────
+
+def _user_to_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "firstname": user.firstname,
+        "lastname": user.lastname,
+        "tier": user.tier,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
+
+
+def _athlete_to_dict(athlete: Athlete) -> dict:
+    return {
+        "id": athlete.id,
+        "strava_id": athlete.strava_id,
+        "firstname": athlete.firstname,
+        "lastname": athlete.lastname,
+        "ftp_watts": athlete.ftp_watts,
+        "weight_kg": float(athlete.weight_kg) if athlete.weight_kg else None,
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Routes — Auth
 # ────────────────────────────────────────────────────────────────────────────
 
