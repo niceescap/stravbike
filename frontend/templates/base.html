@@ -41,8 +41,8 @@
 
 <script>
     // Injecte les infos utilisateur dans le scope global pour le JS
-    window.__USER__ = {{ current_user | tojson if current_user else 'null' }};
-    window.__ATHLETE__ = {{ current_athlete | tojson if current_athlete else 'null' }};
+    window.__USER__ = {{ current_user_dict | safe if current_user_dict else 'null' }};
+    window.__ATHLETE__ = {{ current_athlete_dict | safe if current_athlete_dict else 'null' }};
 </script>
 
 <script src="/static/js/app.js"></script>
