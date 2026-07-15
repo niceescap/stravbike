@@ -227,8 +227,8 @@ async def calendar_page(request: Request, user: User = Depends(require_user), db
         {
             "service_key": SERVICE_KEY,
             "page": "calendar",
-            "current_user": user,
-            "current_athlete": athlete,
+            "current_user_dict": _user_to_dict(user),
+            "current_athlete_dict": _athlete_to_dict(athlete) if athlete else None,
         },
     )
 
