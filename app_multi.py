@@ -685,9 +685,7 @@ async def api_get_comments(
 
 @app.post("/api/comments/")
 async def api_add_comment(
-    comment: str = Form(...),
-    activity_id: int = Form(...),
-    author_role: str = Form("athlete"),
+    request: Request,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -695,6 +693,15 @@ async def api_add_comment(
     athlete = get_user_athlete(db, user)
     if not athlete:
         raise HTTPException(status_code=404, detail="No athlete found")
+
+    body = await request.json()
+    activity_id = int(body.get("activity_id", 0))
+    comment = body.get("comment", "").strip()
+    author_role = body.get("author_role", "visiteur")  # Default = visiteur
+
+    if not comment:
+        raise HTTPException(status_code=400, detail="Comment is required")
+
     act = (
         db.query(Activity)
         .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
@@ -702,6 +709,7 @@ async def api_add_comment(
     )
     if not act:
         raise HTTPException(status_code=404, detail="Activity not found")
+
     new_comment = Comment(
         athlete_id=athlete.id,
         user_id=user.id,
