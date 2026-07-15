@@ -350,6 +350,277 @@ async def get_current_user_api(user: User = Depends(require_user), db: Session =
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Routes — API (compatibilité avec le frontend JS existant)
+# ────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/athlete")
+async def api_get_athlete(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Retourne le profil de l'athlète de l'utilisateur connecté."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete linked to this user")
+    return {
+        "strava_id": athlete.strava_id,
+        "firstname": athlete.firstname,
+        "lastname": athlete.lastname,
+        "ftp_watts": athlete.ftp_watts,
+        "weight_kg": float(athlete.weight_kg) if athlete.weight_kg else None,
+        "power_zones": athlete.power_zones,
+        "heart_rate_zones": athlete.heart_rate_zones,
+        "ytd_distance_km": float(athlete.ytd_distance_km) if athlete.ytd_distance_km else None,
+        "ytd_elevation_m": athlete.ytd_elevation_m,
+        "ytd_time_hours": float(athlete.ytd_time_hours) if athlete.ytd_time_hours else None,
+        "city": athlete.city,
+        "country": athlete.country,
+    }
+
+
+@app.get("/api/activities/")
+async def api_get_activities(
+    limit: int = 500,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne les activités de l'athlète connecté."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        return []
+    activities = (
+        db.query(Activity)
+        .filter(Activity.athlete_id == athlete.id)
+        .order_by(Activity.start_date_local.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "strava_id": a.strava_id,
+            "name": a.name,
+            "sport_type": a.sport_type,
+            "start_date": a.start_date.isoformat() if a.start_date else None,
+            "start_date_local": a.start_date_local.isoformat() if a.start_date_local else None,
+            "distance_km": float(a.distance_km) if a.distance_km else None,
+            "moving_time_min": float(a.moving_time_min) if a.moving_time_min else None,
+            "elevation_gain_m": float(a.elevation_gain_m) if a.elevation_gain_m else None,
+            "avg_watts": float(a.avg_watts) if a.avg_watts else None,
+            "weighted_avg_watts": float(a.weighted_avg_watts) if a.weighted_avg_watts else None,
+            "avg_heartrate": float(a.avg_heartrate) if a.avg_heartrate else None,
+            "avg_speed_kmh": float(a.avg_speed_kmh) if a.avg_speed_kmh else None,
+            "intensity_factor": float(a.intensity_factor) if a.intensity_factor else None,
+            "tss": float(a.tss) if a.tss else None,
+            "athlete_id": athlete.strava_id,
+        }
+        for a in activities
+    ]
+
+
+@app.get("/api/activities/{activity_id}")
+async def api_get_activity_detail(
+    activity_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne le détail d'une activité."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete found")
+    act = (
+        db.query(Activity)
+        .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+        .first()
+    )
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return {
+        "id": act.id,
+        "strava_id": act.strava_id,
+        "name": act.name,
+        "sport_type": act.sport_type,
+        "start_date": act.start_date.isoformat() if act.start_date else None,
+        "start_date_local": act.start_date_local.isoformat() if act.start_date_local else None,
+        "distance_km": float(act.distance_km) if act.distance_km else None,
+        "moving_time_min": float(act.moving_time_min) if act.moving_time_min else None,
+        "elevation_gain_m": float(act.elevation_gain_m) if act.elevation_gain_m else None,
+        "avg_watts": float(act.avg_watts) if act.avg_watts else None,
+        "weighted_avg_watts": float(act.weighted_avg_watts) if act.weighted_avg_watts else None,
+        "max_watts": act.max_watts,
+        "avg_heartrate": float(act.avg_heartrate) if act.avg_heartrate else None,
+        "max_heartrate": act.max_heartrate,
+        "avg_cadence": float(act.avg_cadence) if act.avg_cadence else None,
+        "intensity_factor": float(act.intensity_factor) if act.intensity_factor else None,
+        "tss": float(act.tss) if act.tss else None,
+        "suffer_score": act.suffer_score,
+        "kilojoules": float(act.kilojoules) if act.kilojoules else None,
+        "streams_json": act.streams_json,
+    }
+
+
+@app.post("/api/activities/refresh")
+async def api_refresh_activities(
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Déclenche un import incrémental des activités Strava."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete found")
+    # TODO : appeler ingest_activities_multi en background
+    return {"status": "queued", "athlete_id": athlete.strava_id}
+
+
+@app.get("/api/calendar/week")
+async def api_get_calendar_week(
+    start_date: str,
+    end_date: Optional[str] = None,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne les données calendrier pour la semaine demandée."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        return {"activities": [], "sessions": [], "competitions": []}
+
+    try:
+        week_start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date must be YYYY-MM-DD")
+
+    week_end = (
+        datetime.strptime(end_date, "%Y-%m-%d").date()
+        if end_date
+        else week_start + timedelta(days=6)
+    )
+
+    # Activités
+    activities = (
+        db.query(Activity)
+        .filter(
+            Activity.athlete_id == athlete.id,
+            Activity.start_date_local >= week_start,
+            Activity.start_date_local <= week_end,
+        )
+        .all()
+    )
+    # Séances
+    sessions = (
+        db.query(PlannedSession)
+        .filter(
+            PlannedSession.athlete_id == athlete.id,
+            PlannedSession.session_date >= week_start,
+            PlannedSession.session_date <= week_end,
+        )
+        .all()
+    )
+    # Compétitions
+    competitions = (
+        db.query(Competition)
+        .filter(
+            Competition.athlete_id == athlete.id,
+            Competition.competition_date >= week_start,
+            Competition.competition_date <= week_end,
+        )
+        .all()
+    )
+
+    return {
+        "start_date": start_date,
+        "end_date": week_end.strftime("%Y-%m-%d"),
+        "activities": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "date": a.start_date_local.strftime("%Y-%m-%d") if a.start_date_local else None,
+                "distance_km": float(a.distance_km) if a.distance_km else None,
+                "moving_time_min": float(a.moving_time_min) if a.moving_time_min else None,
+                "elevation_gain_m": float(a.elevation_gain_m) if a.elevation_gain_m else None,
+                "avg_watts": float(a.avg_watts) if a.avg_watts else None,
+                "tss": float(a.tss) if a.tss else None,
+            }
+            for a in activities
+        ],
+        "planned_sessions": [
+            {
+                "id": s.id,
+                "date": s.session_date.strftime("%Y-%m-%d"),
+                "title": s.title,
+                "description": s.description,
+                "status": s.status,
+                "validated": s.validated,
+            }
+            for s in sessions
+        ],
+        "competitions": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "date": c.competition_date.strftime("%Y-%m-%d"),
+                "objective_level": c.objective_level,
+            }
+            for c in competitions
+        ],
+    }
+
+
+@app.get("/api/comments/")
+async def api_get_comments(
+    activity_id: int,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Retourne les commentaires d'une activité."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        return []
+    comments = (
+        db.query(Comment)
+        .filter(Comment.activity_id == activity_id, Comment.athlete_id == athlete.id)
+        .order_by(Comment.created_at)
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "author_role": c.author_role,
+            "comment": c.comment,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in comments
+    ]
+
+
+@app.post("/api/comments/")
+async def api_add_comment(
+    comment: str = Form(...),
+    activity_id: int = Form(...),
+    author_role: str = Form("athlete"),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Ajoute un commentaire à une activité."""
+    athlete = get_user_athlete(db, user)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="No athlete found")
+    act = (
+        db.query(Activity)
+        .filter(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+        .first()
+    )
+    if not act:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    new_comment = Comment(
+        athlete_id=athlete.id,
+        user_id=user.id,
+        activity_id=activity_id,
+        comment=comment,
+        author_role=author_role,
+    )
+    db.add(new_comment)
+    db.commit()
+    return {"status": "ok", "comment_id": new_comment.id}
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Point d'entrée
 # ────────────────────────────────────────────────────────────────────────────
 
