@@ -353,7 +353,7 @@ async def api_chat(
 
     athlete = get_user_athlete(db, user)
     return StreamingResponse(
-        stream_chat(messages, user, athlete),
+        stream_chat(messages, user, athlete, db),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
