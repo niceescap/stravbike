@@ -50,6 +50,11 @@ app = FastAPI(title="Stravbike Multi-User")
 # Montage des statics
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
+# API multi-athlète authentifiée par X-API-Key, servie par le même HTTPS/port.
+# Les routes internes de api_multi commencent par /api, d'où le préfixe final
+# /api-multi/api/... utilisé par le tool OpenWebUI.
+app.mount("/api-multi", api_multi_app)
+
 # Templates Jinja2
 templates = Jinja2Templates(directory="frontend/templates")
 
