@@ -27,6 +27,8 @@ from sqlalchemy.orm import Session
 # Charge .env
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
+OPENWEBUI_MODEL = os.getenv("OPENWEBUI_MODEL", "").strip()
+
 from db.models import User
 
 
@@ -69,8 +71,8 @@ LLM_REGISTRY = {
             "deepseek/deepseek-chat:free",                 # DeepSeek Chat — alternatif solide
             "meta-llama/llama-3.3-70b-instruct:free",      # Llama 3.3 70B — puissant
         ],
-        "label": "Supporter",
-        "description": "Modèles intermédiaires — meilleure qualité de coaching",
+        "label": "Contributeur",
+        "description": "Modèle attribué aux contributeurs — meilleure qualité de coaching",
     },
 
     # ── Niveau DONOR (contribution généreuse) ──
@@ -127,7 +129,7 @@ def get_model_for_user(db: Session, user_id: int) -> str:
 
     # Sinon → modèle par défaut de son niveau
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
-    return tier_config["default"]
+    return OPENWEBUI_MODEL or tier_config["default"]
 
 
 def get_tier_for_user(db: Session, user_id: int) -> dict:
@@ -149,7 +151,7 @@ def get_tier_for_user(db: Session, user_id: int) -> dict:
         raise ValueError(f"User {user_id} not found")
 
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
-    current_model = user.llm_model or tier_config["default"]
+    current_model = user.llm_model or OPENWEBUI_MODEL or tier_config["default"]
 
     return {
         "tier": user.tier,
@@ -208,7 +210,7 @@ def set_user_model(
     tier_config = LLM_REGISTRY.get(user.tier, LLM_REGISTRY["free"])
 
     # Validation : le modèle doit être dans la liste du niveau
-    if model_id not in tier_config["available"]:
+    if model_id != OPENWEBUI_MODEL and model_id not in tier_config["available"]:
         available = ", ".join(tier_config["available"])
         raise ValueError(
             f"Model '{model_id}' is not available for tier '{user.tier}'. "

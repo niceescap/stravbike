@@ -21,7 +21,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, Body
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -42,11 +42,18 @@ load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 from db.database import SessionLocal, init_db
 from db.models import User, Athlete
+from services.llm_handler import stream_chat
+from api_multi import app as api_multi_app
 
 app = FastAPI(title="Stravbike Multi-User")
 
 # Montage des statics
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+
+# API multi-athlète authentifiée par X-API-Key, servie par le même HTTPS/port.
+# Les routes internes de api_multi commencent par /api, d'où le préfixe final
+# /api-multi/api/... utilisé par le tool OpenWebUI.
+app.mount("/api-multi", api_multi_app)
 
 # Templates Jinja2
 templates = Jinja2Templates(directory="frontend/templates")
@@ -332,6 +339,32 @@ async def chat_page(request: Request, user: User = Depends(require_user), db: Se
             "current_athlete_dict": _athlete_to_dict(athlete) if athlete else None,
             "llm_model": model,
             "llm_tier": tier_info["label"],
+        },
+    )
+
+
+@app.post("/api/chat/")
+async def api_chat(
+    payload: dict = Body(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Authenticated streaming chat; identity and model come from the session."""
+    messages = payload.get("messages") if isinstance(payload, dict) else None
+    if not isinstance(messages, list):
+        message = payload.get("message") if isinstance(payload, dict) else None
+        messages = [{"role": "user", "content": message}] if message else []
+    if not messages:
+        raise HTTPException(status_code=400, detail="Aucun message fourni")
+
+    athlete = get_user_athlete(db, user)
+    return StreamingResponse(
+        stream_chat(messages, user, athlete, db),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
