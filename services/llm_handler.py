@@ -114,9 +114,9 @@ async def stream_chat(messages: list[dict], user, athlete) -> AsyncIterator[str]
         "Accept": "text/event-stream",
     }
     endpoint = f"{OPENWEBUI_BASE_URL}/api/chat/completions"
-    logger.info(
-        "OpenWebUI request: model=%s user_id=%s athlete_id=%s tools=%s",
-        payload["model"], user.id, getattr(athlete, "id", None), OPENWEBUI_TOOL_IDS,
+    logger.warning(
+        "OpenWebUI request: model=%s user_id=%s athlete_id=%s tools=%s endpoint=%s",
+        payload["model"], user.id, getattr(athlete, "id", None), OPENWEBUI_TOOL_IDS, endpoint,
     )
 
     try:
