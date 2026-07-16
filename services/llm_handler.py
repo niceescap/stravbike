@@ -122,6 +122,11 @@ async def stream_chat(messages: list[dict], user, athlete) -> AsyncIterator[str]
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
             async with client.stream("POST", endpoint, headers=headers, json=payload) as response:
+                logger.warning(
+                    "OpenWebUI response: HTTP %s content-type=%s",
+                    response.status_code,
+                    response.headers.get("content-type", "?"),
+                )
                 if response.status_code != 200:
                     body = (await response.aread()).decode("utf-8", "replace")
                     logger.error("OpenWebUI HTTP %s: %s", response.status_code, body[:500])
@@ -129,25 +134,57 @@ async def stream_chat(messages: list[dict], user, athlete) -> AsyncIterator[str]
                     return
 
                 async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
+                    raw = line.strip()
+                    if not raw:
                         continue
-                    data = line[5:].strip()
+                    if raw.startswith("data:"):
+                        data = raw[5:].strip()
+                    elif raw.startswith("{"):
+                        # Some OpenWebUI/proxy configurations omit the SSE prefix.
+                        data = raw
+                    else:
+                        continue
                     if data == "[DONE]":
                         break
                     try:
                         chunk = json.loads(data)
                     except json.JSONDecodeError:
+                        logger.warning("OpenWebUI non-JSON event: %s", data[:200])
                         continue
 
                     choices = chunk.get("choices") or []
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta") or {}
-                    if delta.get("content"):
-                        yield _sse({"content": delta["content"]})
-                    if delta.get("reasoning"):
-                        yield _sse({"reasoning": delta["reasoning"]})
-                    if delta.get("tool_calls"):
+                    choice = choices[0] if choices else {}
+                    delta = choice.get("delta") or {}
+                    message = choice.get("message") or {}
+
+                    # OpenAI streaming, non-streaming fallback, and OpenWebUI
+                    # event variants are all accepted here.
+                    content = (
+                        delta.get("content")
+                        or message.get("content")
+                        or choice.get("text")
+                        or chunk.get("content")
+                    )
+                    if isinstance(content, list):
+                        content = "".join(
+                            item.get("text", "") if isinstance(item, dict) else str(item)
+                            for item in content
+                        )
+                    if content:
+                        yield _sse({"content": content})
+
+                    reasoning = (
+                        delta.get("reasoning")
+                        or delta.get("reasoning_content")
+                        or message.get("reasoning")
+                        or message.get("reasoning_content")
+                        or chunk.get("reasoning")
+                        or chunk.get("reasoning_content")
+                    )
+                    if reasoning:
+                        yield _sse({"reasoning": reasoning})
+
+                    if delta.get("tool_calls") or message.get("tool_calls"):
                         yield _sse({"tool_status": "Le coach consulte les données Strava…"})
 
     except httpx.RequestError as exc:
