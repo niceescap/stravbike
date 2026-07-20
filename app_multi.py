@@ -503,8 +503,30 @@ async def api_refresh_activities(
     athlete = get_user_athlete(db, user)
     if not athlete:
         raise HTTPException(status_code=404, detail="No athlete found")
-    # TODO : appeler ingest_activities_multi en background
-    return {"status": "queued", "athlete_id": athlete.strava_id}
+
+    import asyncio
+    from ingestion.ingest_activities_multi import incremental_refresh
+
+    # Lance l'import en arrière-plan pour ne pas bloquer la réponse HTTP
+    def _sync():
+        sub_db = SessionLocal()
+        try:
+            sub_athlete = (
+                sub_db.query(Athlete)
+                .filter(Athlete.id == athlete.id)
+                .first()
+            )
+            if sub_athlete:
+                count = incremental_refresh(sub_db, sub_athlete)
+                print(f"🔄 Auto-sync calendrier: {count} nouvelle(s) activité(s) pour {sub_athlete.firstname} {sub_athlete.lastname}")
+        except Exception as exc:
+            print(f"⚠️ Auto-sync échouée pour athlete {athlete.id}: {exc}")
+        finally:
+            sub_db.close()
+
+    asyncio.create_task(asyncio.to_thread(_sync))
+
+    return {"status": "syncing", "athlete_id": athlete.strava_id}
 
 
 @app.get("/api/calendar/week")
