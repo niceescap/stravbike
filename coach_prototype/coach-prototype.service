@@ -1,0 +1,15 @@
+[Unit]
+Description=Coach prototype (isolated demo)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=nicee
+WorkingDirectory=/home/nicee/coach
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/home/nicee/coach/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 2025 --workers 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
