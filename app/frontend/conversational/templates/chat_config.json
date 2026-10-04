@@ -1,0 +1,39 @@
+{
+  "api_endpoint": "/api/chat/",
+  "streaming_enabled": true,
+  "max_history_messages": 20,
+  "default_model": "openai/gpt-4-turbo",
+  "models": [
+    {
+      "id": "openai/gpt-4-turbo",
+      "name": "GPT-4 Turbo",
+      "tier": "premium",
+      "cost_per_1k_tokens": 0.0300
+    },
+    {
+      "id": "mistralai/mistral-7b-instruct",
+      "name": "Mistral 7B",
+      "tier": "free",
+      "cost_per_1k_tokens": 0.0010
+    },
+    {
+      "id": "claude-3-haiku",
+      "name": "Claude 3 Haiku",
+      "tier": "supporter",
+      "cost_per_1k_tokens": 0.0020
+    },
+    {
+      "id": "qwen-max",
+      "name": "Qwen Max",
+      "tier": "supporter",
+      "cost_per_1k_tokens": 0.0050
+    }
+  ],
+  "ui": {
+    "max_width": "800px",
+    "avatar_user": "N",
+    "avatar_assistant": "🤖",
+    "show_reasoning": true,
+    "show_tool_status": true
+  }
+}
