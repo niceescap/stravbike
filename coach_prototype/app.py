@@ -29,6 +29,10 @@ SESSION_SECONDS = 8 * 3600
 
 if not DATABASE_URL:
     raise RuntimeError('DATABASE_URL must point to an isolated coach database')
+if os.getenv('TESTING') != '1' and (
+    not DATABASE_URL.startswith('postgresql') or make_url(DATABASE_URL).database != 'coach_proto'
+):
+    raise RuntimeError('Demo may only use the dedicated PostgreSQL coach_proto database')
 if len(SESSION_SECRET) < 32:
     raise RuntimeError('SESSION_SECRET must be at least 32 characters')
 if not DEMO_MODE:
