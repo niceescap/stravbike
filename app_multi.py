@@ -246,7 +246,7 @@ async def logout(request: Request):
 async def root(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Page d'accueil — redirige selon l'état de session."""
     if user:
-        return RedirectResponse(url="/calendar", status_code=302)
+        return RedirectResponse(url="/chat", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
 
