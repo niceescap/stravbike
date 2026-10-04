@@ -168,6 +168,13 @@ app.mount('/static', StaticFiles(directory=ROOT/'static'), name='static')
 templates = Jinja2Templates(directory=ROOT/'templates')
 
 
+@app.exception_handler(HTTPException)
+async def auth_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401 and request.url.path == '/app':
+        return RedirectResponse('/login', status_code=303)
+    return JSONResponse({'detail': exc.detail}, status_code=exc.status_code, headers=exc.headers)
+
+
 def get_db():
     with SessionLocal() as db:
         yield db
