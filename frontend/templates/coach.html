@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Coach — entraînement cycliste</title>
+  <link rel="stylesheet" href="/static/css/coach.css">
+  <script src="/static/js/coach.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <strong class="brand">🚴 Coach</strong>
+      <button id="settings-trigger" class="avatar-trigger" type="button" aria-label="Ouvrir les paramètres" aria-controls="settings-panel" aria-expanded="false">
+        {% if athlete and athlete.profile_pic_url %}
+          <img src="{{ athlete.profile_pic_url }}" alt="" referrerpolicy="no-referrer">
+        {% else %}<span aria-hidden="true">{{ (athlete.firstname[:1] if athlete and athlete.firstname else 'C') | upper }}</span>{% endif %}
+      </button>
+    </header>
+
+    <main class="chat" aria-label="Conversation">
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite">
+        <div class="welcome">
+          <h1>Votre espace de coaching</h1>
+          <p>Discutez de vos activités et de vos objectifs avec votre coach électronique.</p>
+          <p class="notice">La connexion au modèle sera activée lors de la prochaine étape. Aucun message n'est envoyé pour l'instant.</p>
+        </div>
+      </div>
+      <div id="chat-status" class="chat-status" role="status">Inférence indisponible pendant cette prévisualisation.</div>
+      <form class="composer" id="chat-form">
+        <label class="sr-only" for="chat-input">Message au coach</label>
+        <textarea id="chat-input" rows="1" placeholder="La discussion sera bientôt disponible…" disabled></textarea>
+        <button id="chat-send" type="submit" disabled aria-label="Envoyer">➤</button>
+      </form>
+    </main>
+  </div>
+
+  <div id="settings-overlay" class="overlay" hidden></div>
+  <aside id="settings-panel" class="settings-panel" aria-label="Paramètres" aria-hidden="true" inert>
+    <div class="settings-head"><h2>Paramètres</h2><button id="settings-close" type="button" aria-label="Fermer les paramètres">×</button></div>
+    <div class="settings-body">
+      <section class="setting-section">
+        <div class="section-heading"><h3>Profil athlète</h3><label for="language-select">🌐 <span class="sr-only">Langue</span></label><select id="language-select" aria-label="Langue"><option value="fr">Français</option><option value="en">English</option></select></div>
+        {% if athlete %}
+          <dl class="profile-grid">
+            <div><dt>Nom</dt><dd>{{ athlete.firstname or '' }} {{ athlete.lastname or '' }}</dd></div>
+            <div><dt>FTP</dt><dd>{{ athlete.ftp_watts if athlete.ftp_watts is not none else '—' }} W</dd></div>
+            <div><dt>Poids</dt><dd>{{ athlete.weight_kg if athlete.weight_kg is not none else '—' }} kg</dd></div>
+            <div><dt>Distance annuelle</dt><dd>{{ athlete.ytd_distance_km if athlete.ytd_distance_km is not none else '—' }} km</dd></div>
+          </dl>
+        {% else %}<p>Aucun profil athlète relié au compte.</p>{% endif %}
+        <p class="hint">L'avatar utilise la photo de profil existante ; sa modification sera ajoutée avec la gestion du profil.</p>
+      </section>
+      <div class="settings-pair">
+        <section class="setting-section"><h3>Crédit d'inférence</h3><div class="gauge" role="meter" aria-label="Crédit non disponible" aria-valuemin="0" aria-valuemax="2000000" aria-valuenow="0"><span></span></div><div class="gauge-scale"><small>0</small><small>100k / graduation</small><small>2M</small></div><p class="hint">Solde non disponible : comptabilisation à connecter à la base de données.</p></section>
+        <section class="setting-section"><h3>Modèle moteur</h3><label class="sr-only" for="model-select">Modèle</label><select id="model-select" disabled><option>Choix des modèles à venir</option></select><p class="hint">Les modèles et tarifs seront définis lors de l'orchestration.</p></section>
+      </div>
+      <section class="setting-section"><h3>Activités et documents</h3>
+        <div class="table-controls"><label for="row-filter">Filtrer</label><input id="row-filter" type="search" placeholder="Rechercher par titre ou type"><label for="row-sort">Trier</label><select id="row-sort"><option value="recent">Plus récent</option><option value="oldest">Plus ancien</option><option value="title">Titre</option></select></div>
+        <div class="table-scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Titre</th><th>Durée</th><th>Distance</th></tr></thead><tbody id="activity-rows"><tr><td colspan="5">Chargement…</td></tr></tbody></table></div>
+        <p class="hint">Les documents Markdown apparaîtront ici après activation des artefacts en base.</p>
+      </section>
+      <a class="logout" href="/logout">Se déconnecter</a>
+    </div>
+  </aside>
+  <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-head"><h2 id="detail-title">Détails</h2><button id="detail-close" type="button" aria-label="Fermer">×</button></div><div id="detail-body"></div></dialog>
+</body>
+</html>
