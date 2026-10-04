@@ -38,7 +38,8 @@ class CoachPreviewTests(unittest.TestCase):
         self.assertIn('settings-panel', response.text)
         self.assertIn('Test Athlete', response.text)
         self.assertIn('disabled', response.text)
-        self.assertNotIn(app_multi.SERVICE_KEY, response.text) if app_multi.SERVICE_KEY else None
+        if app_multi.SERVICE_KEY:
+            self.assertNotIn(app_multi.SERVICE_KEY, response.text)
 
     def test_static_assets_are_served(self):
         self.assertEqual(self.client.get('/static/css/coach.css').status_code, 200)
