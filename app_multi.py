@@ -315,24 +315,12 @@ async def activity_detail_page(
 
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """Page chat — utilise le modèle LLM alloué à l'utilisateur."""
-    from services.llm_router import get_model_for_user, get_tier_for_user
-
+    """Accueil conversationnel ; l'inférence reste volontairement désactivée."""
     athlete = get_user_athlete(db, user)
-    model = get_model_for_user(db, user.id)
-    tier_info = get_tier_for_user(db, user.id)
-
     return templates.TemplateResponse(
         request,
-        "pages/chat.html",
-        {
-            "service_key": SERVICE_KEY,
-            "page": "chat",
-            "current_user_dict": _user_to_dict(user),
-            "current_athlete_dict": _athlete_to_dict(athlete) if athlete else None,
-            "llm_model": model,
-            "llm_tier": tier_info["label"],
-        },
+        "coach.html",
+        {"athlete": athlete},
     )
 
 
