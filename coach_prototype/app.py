@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.engine import make_url
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env')
