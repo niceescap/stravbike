@@ -219,7 +219,7 @@ async def login_submit(
 
     # Créer le cookie de session
     session_cookie = _sign_session(user.id)
-    response = RedirectResponse(url="/calendar", status_code=302)
+    response = RedirectResponse(url="/chat", status_code=302)
     response.set_cookie(
         COOKIE_NAME,
         session_cookie,
