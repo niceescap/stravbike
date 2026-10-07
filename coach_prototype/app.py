@@ -191,6 +191,78 @@ def root(request: Request):
     return RedirectResponse('/app' if verify_session(request.cookies.get(COOKIE)) else '/login', status_code=303)
 
 
+# Bootstrap registration is explicitly enabled only for the first real account.
+_signup_attempts: dict[str, list[float]] = {}
+
+
+def _signup_response(request: Request, error: str, csrf_token: str, status_code: int = 400):
+    response = templates.TemplateResponse(request, 'signup.html', {'error': error, 'csrf_token': csrf_token}, status_code=status_code)
+    response.set_cookie('coach_signup_csrf', csrf_token, max_age=600, httponly=True,
+                        secure=True, samesite='strict', path='/signup')
+    return response
+
+
+@app.get('/signup', response_class=HTMLResponse)
+def signup_page(request: Request):
+    if not ALLOW_SIGNUP:
+        raise HTTPException(status_code=403, detail='Account creation is closed')
+    csrf_token = secrets.token_urlsafe(32)
+    return _signup_response(request, '', csrf_token, status_code=200)
+
+
+@app.post('/signup', response_class=HTMLResponse)
+def signup(
+    request: Request,
+    csrf_token: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    name: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    password_confirm: Annotated[str, Form()],
+    db: Session = Depends(get_db),
+):
+    if not ALLOW_SIGNUP:
+        raise HTTPException(status_code=403, detail='Account creation is closed')
+    stored_csrf = request.cookies.get('coach_signup_csrf', '')
+    if not stored_csrf or not secrets.compare_digest(stored_csrf, csrf_token):
+        return _signup_response(request, 'Formulaire expiré. Rechargez la page et réessayez.', secrets.token_urlsafe(32), 403)
+
+    address = request.client.host if request.client else 'unknown'
+    now = time.monotonic()
+    recent = [t for t in _signup_attempts.get(address, []) if now - t < 600]
+    if len(recent) >= 5:
+        return _signup_response(request, 'Trop de tentatives de création. Réessayez dans 10 minutes.', csrf_token, 429)
+    _signup_attempts[address] = recent + [now]
+
+    display_name = ' '.join(name.split())
+    try:
+        normalized_email = validate_email(email.strip(), check_deliverability=False).normalized.lower()
+    except EmailNotValidError:
+        return _signup_response(request, 'Saisissez une adresse email valide.', csrf_token, 400)
+    if not display_name or len(display_name) > 120:
+        return _signup_response(request, 'Le nom doit contenir entre 1 et 120 caractères.', csrf_token, 400)
+    if len(password) < 12 or len(password) > 128:
+        return _signup_response(request, 'Choisissez un mot de passe de 12 à 128 caractères.', csrf_token, 400)
+    if not secrets.compare_digest(password, password_confirm):
+        return _signup_response(request, 'Les deux mots de passe ne correspondent pas.', csrf_token, 400)
+
+    user = User(email=normalized_email, password_hash=hash_password(password), name=display_name,
+                ftp_watts=None, weight_kg=None, credit_tokens=0, model_choice='demo')
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        return _signup_response(request, 'Cette adresse email possède déjà un compte.', csrf_token, 409)
+
+    _signup_attempts.pop(address, None)
+    response = RedirectResponse('/app', status_code=303)
+    response.set_cookie(COOKIE, sign_session(user.id), max_age=SESSION_SECONDS,
+                        httponly=True, secure=True, samesite='lax', path='/')
+    response.delete_cookie('coach_signup_csrf', path='/signup')
+    return response
+
+
 @app.get('/login', response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request, 'login.html', {'error': None})
