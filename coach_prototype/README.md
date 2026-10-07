@@ -1,29 +1,89 @@
-# Coach — application autonome de démonstration
+# Coach — démo isolée et première connexion Strava
 
-Ceci est une **nouvelle application FastAPI**, entièrement située dans `coach_prototype/` ; elle ne charge ni `app_multi.py` ni les anciens schémas `stravbike`. La conversation, l'authentification de démonstration et le tableau chronologique fonctionnent sur la nouvelle base `coach_proto`. **Aucune requête Strava, OpenWebUI, OpenRouter ou paiement n'est effectuée.**
+Application autonome FastAPI située dans `coach_prototype/`. Elle ne charge ni `app_multi.py` ni les anciens modèles/tables Stravbike. Sa base autorisée est exclusivement PostgreSQL `coach_proto`. La démo du chat reste simulée ; **elle n'appelle aucun LLM**. Les exemples d'activités et Markdown restent fictifs jusqu'à l'étape de synchronisation.
 
-## Ce que valide la démo
+## Démo et connexion locale
 
-- Connexion du compte `fake_user@test.local` avec mot de passe provenant de `DEMO_PASSWORD` (dans `.env`, jamais dans Git). Le mot de passe choisi pour la démo est `1234` : **ne pas utiliser avec des données réelles**.
-- Chat en accueil, messages jetés à chaque rechargement. La réponse et les blocs « réflexion / outil » sont explicitement **simulés**.
-- Avatar ouvrant les paramètres par un tiroir animé ; profil, jauge 0–2M par graduations 100k, sélecteur de moteur visuel, langue FR/EN pour le tableau.
-- Base séparée avec profil, deux activités et deux documents Markdown fictifs. Tableau triable/filtrable, détail et téléchargement du Markdown. L'API filtre chaque requête par l'utilisateur authentifié.
-- Un seul processus sur `127.0.0.1:2025`. Le port 2024 reste **libre pour le futur OAuth**. Le callback `/auth/callback` n'est pas encore implémenté.
+- Compte de démonstration `fake_user@test.local`; mot de passe lu depuis `DEMO_PASSWORD`, jamais intégré au code. `1234` n'est acceptable que temporairement, avec données fictives et accès administrateur privé ; remplacer par un secret long avant de lier Strava.
+- Profil, crédit et modèles demeurent des données/choix de démo.
+- À chaque rechargement, l'historique de chat simulé est réinitialisé.
 
-## Prérequis / garde-fous
+## OAuth Strava livré par cette branche
 
-La base PostgreSQL `coach_proto` doit être créée séparément, appartenir à un rôle qui peut s'y connecter et être vide au départ. Le prototype refuse de démarrer si `DATABASE_URL` cible une autre base (sauf `TESTING=1` pour tests isolés SQLite). Il crée ses trois tables `coach_*` et injecte des données fictives uniquement avec `DEMO_MODE=1`. Il **ne lit ni ne modifie** `db_multi_stravbike`.
+Un service FastAPI distinct, `oauth_app.py`, doit écouter exclusivement sur `127.0.0.1:2024`. Le service principal continue sur `127.0.0.1:2025`.
 
-L'application est publique si Nginx l'expose : `1234` est un mot de passe connu et faible. N'y placez aucun token ni donnée réelle. Ajouter des limites de requêtes côté proxy si ouvert sur Internet. Avant la vraie auth, remplacer complètement le compte et le flux démo, changer le secret de session et isoler les données réelles.
+- `GET /auth/strava` exige la session de l'utilisateur local et crée un `state` CSRF aléatoire, à durée courte, à usage unique et lié à son ID.
+- Le callback exact est `https://proto.fu19.org/auth/callback`. Dans les réglages de l'application développeur Strava, le champ *Callback domain* doit contenir seulement `proto.fu19.org`.
+- Les scopes demandés sont `read,activity:read_all,profile:read_all`; le callback refuse de stocker la connexion si `activity:read_all` ou `profile:read_all` manquent.
+- Échange du code côté serveur. L'identifiant Strava est lié à un seul utilisateur local. Seul le refresh token rotatif est stocké, chiffré par Fernet dans `coach_strava_connections`; ni le token d'accès ni le secret client ne sont renvoyés au navigateur ou journalisés.
+- `POST /auth/strava/refresh` renouvelle le token du compte connecté et persiste le nouveau refresh token ; aucun token n'est retourné au client. La fonction renvoie vers la page compte.
+- `GET /auth/status` renvoie uniquement l'état et les métadonnées non secrètes du compte lié.
+- Le bouton compte s'affiche dans le tiroir des paramètres.
 
-## Installation (à effectuer seulement après revue et accord)
+**Limite importante :** cette phase connecte Strava et conserve le refresh token chiffré, mais n'importe pas encore les activités réelles dans le tableau. Celui-ci montre encore les exemples fictifs. Le chat reste simulé. Aucune inférence, dépense de token ou facturation n'est activée.
 
-Le code de cette PR doit être déployé en copiant **le contenu de `coach_prototype/` seulement** vers `/home/nicee/coach`, pas toute la branche Git (qui contient aussi l'ancien projet). Sauvegarder puis vider uniquement `/home/nicee/coach` lorsque la PR est validée. Aucune commande destructive n'est exécutée par cette PR.
+## Variables privées `.env`
 
-1. Préparer la base `coach_proto` et l'accès PostgreSQL pour `nicee`. À confirmer avant d'utiliser `createdb`/`sudo`.
-2. Installer les dépendances dans un nouveau `.venv` : `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
-3. Copier `.env.example` vers `.env`, fixer `DATABASE_URL=postgresql:///coach_proto`, `DEMO_MODE=1`, `DEMO_PASSWORD=1234` et un `SESSION_SECRET` aléatoire d'au moins 32 caractères. Garder `.env` en mode `600` ; **pas de secrets Strava dans cette démo**.
-4. Tester à part : `.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v` (utilise SQLite sous `TESTING=1`).
-5. Configurer le service systemd depuis `coach-prototype.service` (requiert `sudo` de l'utilisateur), puis basculer Nginx vers `127.0.0.1:2025` après contrôle local de `/health` et `/login`. Ne pas lancer deux services sur 2025 simultanément.
+Copier `.env.example` en `.env`, remplir les champs sur le serveur, ne jamais committer `.env` :
 
-Le code n'a pas été exécuté via les outils GitHub ; les tests doivent être lancés avant mise en ligne. La prochaine phase branchera Strava OAuth sur 2024, les modèles, une vraie piste de consommation des tokens et la persistance des préférences.
+```dotenv
+DATABASE_URL=postgresql:///coach_proto
+DEMO_MODE=1
+DEMO_PASSWORD=<secret privé temporaire, à remplacer pour l'accès public>
+SESSION_SECRET=<secret aléatoire de 64 caractères hexadécimaux>
+STRAVA_CLIENT_ID=<client id de l'application>
+STRAVA_CLIENT_SECRET=<nouveau client secret>
+STRAVA_REDIRECT_URI=https://proto.fu19.org/auth/callback
+STRAVA_TOKEN_FERNET_KEY=<clé Fernet générée une fois et sauvegardée en lieu sûr>
+```
+
+Générer les secrets, sans les afficher dans les sorties de diagnostic partagées :
+
+```bash
+/home/nicee/coach/.venv/bin/python -c 'import secrets; print(secrets.token_hex(32))'
+/home/nicee/coach/.venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+chmod 600 /home/nicee/coach/.env
+```
+
+Le Fernet key est indispensable pour lire les refresh tokens déjà chiffrés ; sauvegarder cette clé dans un gestionnaire de secrets. Si elle est perdue, les comptes Strava devront réautoriser l'application.
+
+## Déploiement — seulement après merge/revue
+
+Copier **le contenu de `coach_prototype/`**, pas la racine du dépôt, vers `/home/nicee/coach`. Créer auparavant la base séparée `coach_proto`, détenue par l'utilisateur PostgreSQL `nicee`. Les processus n'écoutent que localhost.
+
+Installer les dépendances et vérifier l'isolation/tests :
+
+```bash
+cd /home/nicee/coach
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+Installer deux services distincts (actions sudo opérées par l'administrateur) :
+
+```bash
+sudo cp /home/nicee/coach/coach-prototype.service /etc/systemd/system/
+sudo cp /home/nicee/coach/coach-oauth.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now coach-prototype coach-oauth
+```
+
+Confirmer les deux listeners locaux : app `2025`, OAuth `2024`. Nginx conserve `location /` vers 2025 et ajoute/remplace la route spécifique :
+
+```nginx
+location ^~ /auth/ {
+    proxy_pass http://127.0.0.1:2024;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Le `proxy_pass` sans URI finale conserve `/auth/callback`. Tester la config Nginx avant son reload. Ne pas autoriser Strava avant que les deux services soient actifs et que `/auth/strava` puis `/auth/callback` passent par HTTPS.
+
+## Tests
+
+Le test OAuth contrôle les scopes/redirect/state sans contacter Strava. Le test ne peut pas valider un vrai échange d'autorisation ; pour cela, utiliser un seul compte pilote après la revue de sécurité et le démarrage du service OAuth. Aucun secret réel ni token n'est requis pour les tests.
