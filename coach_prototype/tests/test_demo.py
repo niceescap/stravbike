@@ -1,6 +1,7 @@
 """Account creation/login and per-user timeline tests on isolated SQLite."""
 import os
 import re
+import secrets
 import sys
 import tempfile
 import unittest
