@@ -32,6 +32,9 @@ class StravaOAuthRouteTests(unittest.TestCase):
 
     def tearDown(self):
         self.client_context.__exit__(None, None, None)
+        with coach.SessionLocal.begin() as db:
+            db.query(coach.OAuthState).filter(coach.OAuthState.user_id == self.user_id).delete(synchronize_session=False)
+            db.query(coach.StravaConnection).filter(coach.StravaConnection.user_id == self.user_id).delete(synchronize_session=False)
 
     def test_authorize_requires_local_login(self):
         response = self.client.get('/auth/strava', follow_redirects=False)
