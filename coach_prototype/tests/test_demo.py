@@ -81,7 +81,7 @@ class AccountTests(unittest.TestCase):
         })
         self.assertEqual(invalid.status_code, 400)
         self.assertIn('12', invalid.text)
-        unique_email = f'validation-{__import__("secrets").token_hex(5)}@example.com'
+        unique_email = f'validation-{secrets.token_hex(5)}@example.com'
         self.assertEqual(self.signup(unique_email).status_code, 303)
         duplicate_page = self.client.get('/signup')
         duplicate_csrf = re.search(r'name="csrf_token" value="([^"]+)"', duplicate_page.text).group(1)
