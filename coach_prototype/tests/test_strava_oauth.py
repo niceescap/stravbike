@@ -50,7 +50,7 @@ class StravaOAuthRouteTests(unittest.TestCase):
         self.assertEqual(response.headers['location'], '/login')
 
     def test_authorize_uses_domain_callback_and_persisted_one_time_state(self):
-        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id), secure=True)
+        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id))
         response = self.client.get('/auth/strava', follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         location = urlparse(response.headers['location'])
@@ -67,7 +67,7 @@ class StravaOAuthRouteTests(unittest.TestCase):
             self.assertEqual(state_row.user_id, self.user_id)
 
     def test_invalid_state_fails_before_external_token_exchange(self):
-        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id), secure=True)
+        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id))
         response = self.client.get('/auth/callback?code=not-used&state=invalid', follow_redirects=False)
         self.assertEqual(response.status_code, 400)
 
@@ -97,7 +97,7 @@ class StravaOAuthRouteTests(unittest.TestCase):
         mocked_response = Mock()
         mocked_response.raise_for_status.return_value = None
         mocked_response.json.return_value = response_payload
-        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id), secure=True)
+        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id))
         with patch.object(oauth.httpx, 'post', return_value=mocked_response) as provider_call:
             callback = self.client.get('/auth/callback', params={'code': 'one-use-code', 'state': raw_state}, follow_redirects=False)
         self.assertEqual(callback.status_code, 303)
@@ -123,7 +123,7 @@ class StravaOAuthRouteTests(unittest.TestCase):
         mocked_response = Mock()
         mocked_response.raise_for_status.return_value = None
         mocked_response.json.return_value = {'access_token': 'not-persisted', 'refresh_token': 'rotated-refresh', 'expires_at': expires}
-        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id), secure=True)
+        self.client.cookies.set(coach.COOKIE, coach.sign_session(self.user_id))
         with patch.object(oauth.httpx, 'post', return_value=mocked_response):
             result = self.client.post('/auth/strava/refresh', follow_redirects=False)
         self.assertEqual(result.status_code, 303)
