@@ -85,6 +85,30 @@ class Artifact(Base):
     related_activity_id: Mapped[int | None] = mapped_column(ForeignKey('coach_activities.id'), nullable=True)
 
 
+class StravaConnection(Base):
+    """Encrypted, per-user Strava refresh-token connection."""
+    __tablename__ = 'coach_strava_connections'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('coach_users.id'), unique=True, index=True)
+    strava_athlete_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    athlete_name: Mapped[str] = mapped_column(String(160))
+    profile_pic_url: Mapped[str | None] = mapped_column(Text)
+    refresh_token_encrypted: Mapped[str] = mapped_column(Text)
+    token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    scopes: Mapped[str] = mapped_column(Text)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class OAuthState(Base):
+    """Single-use OAuth CSRF state bound to a logged-in local user."""
+    __tablename__ = 'coach_oauth_states'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('coach_users.id'), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 def hash_password(password: str, salt: str | None = None) -> str:
     salt = salt or secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 310_000)
