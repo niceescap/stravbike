@@ -24,9 +24,14 @@ import oauth_app as oauth  # noqa: E402
 
 class StravaOAuthRouteTests(unittest.TestCase):
     def setUp(self):
-        coach.seed_demo()
-        with coach.SessionLocal() as db:
-            self.user_id = db.scalar(coach.select(coach.User.id).where(coach.User.email == 'fake_user@test.local'))
+        coach.initialize_schema()
+        self.email = f'oauth-{secrets.token_hex(6)}@example.com'
+        with coach.SessionLocal.begin() as db:
+            user = coach.User(email=self.email, name='OAuth Test Athlete',
+                              password_hash=coach.hash_password('test-only-password-12345'))
+            db.add(user)
+            db.flush()
+            self.user_id = user.id
         self.client_context = TestClient(oauth.oauth_app, base_url='https://testserver')
         self.client = self.client_context.__enter__()
 
@@ -35,6 +40,9 @@ class StravaOAuthRouteTests(unittest.TestCase):
         with coach.SessionLocal.begin() as db:
             db.query(coach.OAuthState).filter(coach.OAuthState.user_id == self.user_id).delete(synchronize_session=False)
             db.query(coach.StravaConnection).filter(coach.StravaConnection.user_id == self.user_id).delete(synchronize_session=False)
+            user = db.get(coach.User, self.user_id)
+            if user is not None:
+                db.delete(user)
 
     def test_authorize_requires_local_login(self):
         response = self.client.get('/auth/strava', follow_redirects=False)
