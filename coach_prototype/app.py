@@ -278,7 +278,7 @@ def login(request: Request, email: Annotated[str, Form()], password: Annotated[s
     now = time.monotonic()
     recent = [t for t in _attempts.get(address, []) if now - t < 60]
     if len(recent) >= 5:
-        return templates.TemplateResponse(request, 'login.html', {'error': 'Trop de tentatives. Réessayez dans une minute.'}, status_code=429)
+        return templates.TemplateResponse(request, 'login.html', {'error': 'Trop de tentatives. Réessayez dans une minute.', 'allow_signup': ALLOW_SIGNUP}, status_code=429)
     user = db.scalar(select(User).where(User.email == email.strip().lower()))
     if not user or not verify_password(password, user.password_hash):
         _attempts[address] = recent + [now]
