@@ -145,39 +145,9 @@ def verify_session(cookie: str | None) -> int | None:
         return None
 
 
-def seed_demo() -> None:
-    """Seed only the dedicated demo database; never touch the legacy Stravbike DB."""
+def initialize_schema() -> None:
+    """Create only Coach tables in the explicitly isolated coach_proto database."""
     Base.metadata.create_all(engine)
-    with SessionLocal.begin() as db:
-        user = db.scalar(select(User).where(User.email == 'fake_user@test.local'))
-        if user is None:
-            user = User(email='fake_user@test.local', password_hash=hash_password(DEMO_PASSWORD),
-                        name='Athlète Démo', ftp_watts=150, weight_kg=30,
-                        credit_tokens=900_000, model_choice='Mode démo')
-            db.add(user)
-            db.flush()
-        # A newly supplied DEMO_PASSWORD takes effect on service restart.
-        elif not verify_password(DEMO_PASSWORD, user.password_hash):
-            user.password_hash = hash_password(DEMO_PASSWORD)
-        if not db.scalar(select(Activity.id).where(Activity.user_id == user.id).limit(1)):
-            now = datetime.now(timezone.utc)
-            rides = [
-                Activity(user_id=user.id, title='Sortie endurance — démonstration', occurred_at=now-timedelta(days=1),
-                         sport='Ride', duration_minutes=78, distance_km=27.8, avg_watts=112,
-                         notes='Donnée fictive pour valider la navigation.'),
-                Activity(user_id=user.id, title='Effort continu — démonstration', occurred_at=now-timedelta(days=4),
-                         sport='Ride', duration_minutes=42, distance_km=16.3, avg_watts=138,
-                         notes='Donnée fictive. Aucun appel vers un service externe.'),
-            ]
-            db.add_all(rides)
-            db.flush()
-            db.add_all([
-                Artifact(user_id=user.id, title='Structure de séance — démonstration', created_at=now-timedelta(days=2),
-                         category='training_plan', related_activity_id=rides[0].id,
-                         markdown='# Exemple de séance\n\n- Échauffement libre\n- Bloc principal à adapter avec le coach\n- Retour au calme\n\n*Ceci est un document fictif de démonstration.*'),
-                Artifact(user_id=user.id, title='Note de récupération — démonstration', created_at=now-timedelta(days=5),
-                         category='recommendation', markdown='# Note\n\nPrivilégier le repos après les efforts intenses.\n\n*Document fictif.*'),
-            ])
 
 
 @asynccontextmanager
