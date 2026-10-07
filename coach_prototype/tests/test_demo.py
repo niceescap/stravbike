@@ -81,8 +81,10 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.assertIn('12', invalid.text)
         self.assertEqual(self.signup().status_code, 303)
+        duplicate_page = self.client.get('/signup')
+        duplicate_csrf = re.search(r'name="csrf_token" value="([^"]+)"', duplicate_page.text).group(1)
         duplicate = self.client.post('/signup', data={
-            'csrf_token': csrf, 'email': 'PILOT@example.com', 'name': 'Other',
+            'csrf_token': duplicate_csrf, 'email': 'PILOT@example.com', 'name': 'Other',
             'password': 'a-long-test-password-987', 'password_confirm': 'a-long-test-password-987',
         })
         self.assertEqual(duplicate.status_code, 409)
