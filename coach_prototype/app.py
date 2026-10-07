@@ -282,7 +282,7 @@ def login(request: Request, email: Annotated[str, Form()], password: Annotated[s
     user = db.scalar(select(User).where(User.email == email.strip().lower()))
     if not user or not verify_password(password, user.password_hash):
         _attempts[address] = recent + [now]
-        return templates.TemplateResponse(request, 'login.html', {'error': 'Identifiants invalides.'}, status_code=401)
+        return templates.TemplateResponse(request, 'login.html', {'error': 'Identifiants invalides.', 'allow_signup': ALLOW_SIGNUP}, status_code=401)
     _attempts.pop(address, None)
     response = RedirectResponse('/app', status_code=303)
     response.set_cookie(COOKIE, sign_session(user.id), max_age=SESSION_SECONDS,
