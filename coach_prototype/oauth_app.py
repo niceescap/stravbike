@@ -1,7 +1,8 @@
-"""Strava OAuth authorization-code callback service (localhost port 2024).
+"""Dedicated Strava OAuth service. Run only on 127.0.0.1:2024.
 
-No tokens are logged or returned to the browser. The Strava refresh token is
-Fernet-encrypted at rest in the isolated coach_proto database.
+OAuth state is single-use and bound to the signed UI session. Refresh tokens
+are encrypted at rest; provider credentials and tokens are never logged or
+returned to the browser.
 """
 import hashlib
 import os
@@ -13,17 +14,10 @@ from urllib.parse import urlencode
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, PlainTextResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
-from app import (
-    COOKIE,
-    OAuthState,
-    SessionLocal,
-    StravaConnection,
-    User,
-    verify_session,
-)
+from app import COOKIE, Base, OAuthState, SessionLocal, StravaConnection, User, engine, verify_session
 
 CLIENT_ID = os.getenv('STRAVA_CLIENT_ID', '').strip()
 CLIENT_SECRET = os.getenv('STRAVA_CLIENT_SECRET', '').strip()
@@ -52,11 +46,17 @@ def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
+def _check_config() -> None:
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail='Strava client credentials are not configured')
+    if REDIRECT_URI != 'https://proto.fu19.org/auth/callback':
+        raise HTTPException(status_code=503, detail='Strava redirect URI does not match this deployment')
+    get_fernet()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Main service creates the same isolated schema; this also makes OAuth
-    # startup order independent without touching any legacy database.
-    from app import Base, engine
+    # Same isolated coach_proto database; safe if either service starts first.
     Base.metadata.create_all(engine)
     yield
 
@@ -66,7 +66,7 @@ oauth_app = FastAPI(title='Coach Strava OAuth', lifespan=lifespan, docs_url=None
 
 @oauth_app.get('/health')
 def health():
-    return {'status': 'oauth-ready' if CLIENT_ID and CLIENT_SECRET else 'oauth-not-configured'}
+    return {'status': 'oauth-ready' if CLIENT_ID and CLIENT_SECRET and TOKEN_FERNET_KEY else 'oauth-not-configured'}
 
 
 @oauth_app.get('/auth/strava')
@@ -74,10 +74,7 @@ def begin_authorization(request: Request):
     user_id = verify_session(request.cookies.get(COOKIE))
     if user_id is None:
         return RedirectResponse('/login', status_code=303)
-    if not CLIENT_ID or not CLIENT_SECRET:
-        raise HTTPException(status_code=503, detail='Strava client credentials are not configured')
-    if not REDIRECT_URI.startswith('https://proto.fu19.org/auth/callback'):
-        raise HTTPException(status_code=503, detail='Unexpected Strava redirect URI')
+    _check_config()
 
     state = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
@@ -98,7 +95,7 @@ def begin_authorization(request: Request):
     return RedirectResponse(f'{AUTH_URL}?{urlencode(params)}', status_code=302)
 
 
-@oauth_app.get('/auth/callback', response_class=PlainTextResponse)
+@oauth_app.get('/auth/callback')
 def authorization_callback(
     request: Request,
     code: str | None = Query(default=None, max_length=512),
@@ -107,37 +104,32 @@ def authorization_callback(
 ):
     if error:
         return RedirectResponse('/app?strava=denied', status_code=303)
-    if not code or not state or not CLIENT_ID or not CLIENT_SECRET:
+    if not code or not state:
         raise HTTPException(status_code=400, detail='OAuth callback is missing required parameters')
+    _check_config()
 
     user_id = verify_session(request.cookies.get(COOKIE))
     if user_id is None:
         raise HTTPException(status_code=401, detail='Please log in again before connecting Strava')
 
     now = datetime.now(timezone.utc)
-    digest = state_digest(state)
-    # Consume the state in its own transaction before contacting Strava.
     with SessionLocal.begin() as db:
-        saved = db.scalar(select(OAuthState).where(OAuthState.state_hash == digest).with_for_update())
+        saved = db.scalar(select(OAuthState).where(OAuthState.state_hash == state_digest(state)).with_for_update())
         if saved is None or saved.user_id != user_id or _aware(saved.expires_at) <= now:
             raise HTTPException(status_code=400, detail='OAuth state is invalid, expired, or already used')
-        db.delete(saved)
+        db.delete(saved)  # one-time state; a failed exchange requires restarting OAuth
 
     try:
         response = httpx.post(
             TOKEN_URL,
-            data={
-                'client_id': CLIENT_ID,
-                'client_secret': CLIENT_SECRET,
-                'code': code,
-                'grant_type': 'authorization_code',
-            },
+            data={'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET,
+                  'code': code, 'grant_type': 'authorization_code'},
             timeout=20.0,
         )
         response.raise_for_status()
         token_data = response.json()
     except (httpx.HTTPError, ValueError):
-        # Do not log or return the request body, client secret, code, or tokens.
+        # Never include provider response, authorization code, or credentials in logs/errors.
         raise HTTPException(status_code=502, detail='Strava token exchange failed; restart authorization')
 
     athlete = token_data.get('athlete') or {}
@@ -151,104 +143,24 @@ def authorization_callback(
         raise HTTPException(status_code=403, detail='Required Strava scopes were not granted; reconnect and approve activity/profile access')
 
     encrypted_refresh = get_fernet().encrypt(refresh_token.encode('utf-8')).decode('ascii')
-    name = ' '.join(part for part in (athlete.get('firstname'), athlete.get('lastname')) if part).strip() or 'Strava athlete'
-    profile = athlete.get('profile') or athlete.get('profile_medium')
+    athlete_name = ' '.join(part for part in (athlete.get('firstname'), athlete.get('lastname')) if part).strip() or 'Strava athlete'
+    profile_url = athlete.get('profile') or athlete.get('profile_medium')
     expiry = datetime.fromtimestamp(int(expires_at), tz=timezone.utc)
     with SessionLocal.begin() as db:
-        existing_owner = db.scalar(select(StravaConnection).where(StravaConnection.strava_athlete_id == int(strava_id)))
-        if existing_owner is not None and existing_owner.user_id != user_id:
+        owner = db.scalar(select(StravaConnection).where(StravaConnection.strava_athlete_id == int(strava_id)))
+        if owner is not None and owner.user_id != user_id:
             raise HTTPException(status_code=409, detail='This Strava athlete is already linked to another account')
         connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id))
         if connection is None:
             connection = StravaConnection(user_id=user_id, strava_athlete_id=int(strava_id),
-                                          athlete_name=name, profile_pic_url=profile,
-                                          refresh_token_encrypted=encrypted_refresh, token_expires_at=expiry,
-                                          scopes=' '.join(sorted(scopes)))
+                athlete_name=athlete_name, profile_pic_url=profile_url,
+                refresh_token_encrypted=encrypted_refresh, token_expires_at=expiry,
+                scopes=' '.join(sorted(scopes)))
             db.add(connection)
         else:
-
-@oauth_app.post('/auth/strava/refresh')
-def refresh_connection(request: Request):
-    """Refresh the connected athlete's short-lived access token, persist rotated refresh token, return no credentials."""
-    user_id = verify_session(request.cookies.get(COOKIE))
-    if user_id is None:
-        raise HTTPException(status_code=401, detail='Login required')
-    if not CLIENT_ID or not CLIENT_SECRET:
-        raise HTTPException(status_code=503, detail='Strava client credentials are not configured')
-    fernet = get_fernet()
-    with SessionLocal.begin() as db:
-        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id).with_for_update())
-        if connection is None:
-            raise HTTPException(status_code=404, detail='No Strava connection for this account')
-        try:
-            refresh_token = fernet.decrypt(connection.refresh_token_encrypted.encode('ascii')).decode('utf-8')
-        except (InvalidToken, UnicodeEncodeError):
-            raise HTTPException(status_code=500, detail='Stored Strava credential cannot be decrypted')
-        try:
-            response = httpx.post(TOKEN_URL, data={
-                'client_id': CLIENT_ID,
-                'client_secret': CLIENT_SECRET,
-                'grant_type': 'refresh_token',
-                'refresh_token': refresh_token,
-            }, timeout=20.0)
-            response.raise_for_status()
-            token_data = response.json()
-        except (httpx.HTTPError, ValueError):
-            raise HTTPException(status_code=502, detail='Strava refresh failed; reconnect the account')
-        new_refresh = token_data.get('refresh_token')
-        expires_at = token_data.get('expires_at')
-        if not new_refresh or not expires_at:
-            raise HTTPException(status_code=502, detail='Strava refresh response is incomplete')
-        connection.refresh_token_encrypted = fernet.encrypt(new_refresh.encode('utf-8')).decode('ascii')
-        connection.token_expires_at = datetime.fromtimestamp(int(expires_at), tz=timezone.utc)
-        connection.updated_at = datetime.now(timezone.utc)
-        safe_expiry = connection.token_expires_at.isoformat()
-    return {'status': 'refreshed', 'token_expires_at': safe_expiry}
-
-
-@oauth_app.post('/auth/strava/disconnect')
-def disconnect_strava(request: Request):
-    """Remove this user's local encrypted refresh token; revocation can be added with provider UI later."""
-    user_id = verify_session(request.cookies.get(COOKIE))
-    if user_id is None:
-        raise HTTPException(status_code=401, detail='Login required')
-    with SessionLocal.begin() as db:
-        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id).with_for_update())
-        if connection is not None:
-            db.delete(connection)
-    return {'status': 'disconnected'}
-
-
-@oauth_app.get('/auth/status')
-def authorization_status(request: Request):
-    user_id = verify_session(request.cookies.get(COOKIE))
-    if user_id is None:
-        raise HTTPException(status_code=401, detail='Login required')
-    with SessionLocal() as db:
-        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id))
-        if connection is None:
-            return {'connected': False}
-        return {
-            'connected': True,
-            'athlete_name': connection.athlete_name,
-            'strava_athlete_id': connection.strava_athlete_id,
-            'scopes': connection.scopes,
-            'token_expires_at': _aware(connection.token_expires_at).isoformat(),
-        }
-
-
-# End of OAuth routes.
-
-# Run separately from the UI process: uvicorn oauth_app:oauth_app --host 127.0.0.1 --port 2024
-
-# Export conventional name for the systemd command.
-app = oauth_app
-
-
-# Previous definition retained below only if old file version did not include the status route.
             connection.strava_athlete_id = int(strava_id)
-            connection.athlete_name = name
-            connection.profile_pic_url = profile
+            connection.athlete_name = athlete_name
+            connection.profile_pic_url = profile_url
             connection.refresh_token_encrypted = encrypted_refresh
             connection.token_expires_at = expiry
             connection.scopes = ' '.join(sorted(scopes))
@@ -256,6 +168,42 @@ app = oauth_app
     return RedirectResponse('/app?strava=connected', status_code=303)
 
 
+@oauth_app.post('/auth/strava/refresh')
+def refresh_connection(request: Request):
+    """Refresh for the current user and persist Strava's newly rotated refresh token."""
+    user_id = verify_session(request.cookies.get(COOKIE))
+    if user_id is None:
+        raise HTTPException(status_code=401, detail='Login required')
+    _check_config()
+    fernet = get_fernet()
+    with SessionLocal.begin() as db:
+        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id).with_for_update())
+        if connection is None:
+            raise HTTPException(status_code=404, detail='No Strava connection for this account')
+        try:
+            current_refresh = fernet.decrypt(connection.refresh_token_encrypted.encode('ascii')).decode('utf-8')
+        except (InvalidToken, UnicodeEncodeError):
+            raise HTTPException(status_code=500, detail='Stored Strava credential cannot be decrypted')
+        try:
+            response = httpx.post(TOKEN_URL, data={
+                'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET,
+                'grant_type': 'refresh_token', 'refresh_token': current_refresh,
+            }, timeout=20.0)
+            response.raise_for_status()
+            token_data = response.json()
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(status_code=502, detail='Strava refresh failed; reconnect the account')
+        rotated_refresh = token_data.get('refresh_token')
+        expiry = token_data.get('expires_at')
+        if not rotated_refresh or not expiry:
+            raise HTTPException(status_code=502, detail='Strava refresh response is incomplete')
+        connection.refresh_token_encrypted = fernet.encrypt(rotated_refresh.encode('utf-8')).decode('ascii')
+        connection.token_expires_at = datetime.fromtimestamp(int(expiry), tz=timezone.utc)
+        connection.updated_at = datetime.now(timezone.utc)
+        safe_expiry = connection.token_expires_at.isoformat()
+    return {'status': 'refreshed', 'token_expires_at': safe_expiry}
+
+
 @oauth_app.get('/auth/status')
 def authorization_status(request: Request):
     user_id = verify_session(request.cookies.get(COOKIE))
@@ -265,10 +213,10 @@ def authorization_status(request: Request):
         connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id))
         if connection is None:
             return {'connected': False}
-        return {
-            'connected': True,
-            'athlete_name': connection.athlete_name,
-            'strava_athlete_id': connection.strava_athlete_id,
-            'scopes': connection.scopes,
-            'token_expires_at': _aware(connection.token_expires_at).isoformat(),
-        }
+        return {'connected': True, 'athlete_name': connection.athlete_name,
+                'strava_athlete_id': connection.strava_athlete_id, 'scopes': connection.scopes,
+                'token_expires_at': _aware(connection.token_expires_at).isoformat()}
+
+
+# Dedicated systemd process listens on 127.0.0.1:2024.
+app = oauth_app
