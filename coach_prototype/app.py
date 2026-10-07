@@ -257,8 +257,9 @@ def logout():
 
 
 @app.get('/app', response_class=HTMLResponse)
-def coach_page(request: Request, user: User = Depends(current_user)):
-    return templates.TemplateResponse(request, 'coach.html', {'user': user})
+def coach_page(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user.id))
+    return templates.TemplateResponse(request, 'coach.html', {'user': user, 'strava_connection': connection})
 
 
 @app.get('/api/me')
