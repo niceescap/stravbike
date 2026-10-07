@@ -70,6 +70,12 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/timeline/invalid/1').status_code, 404)
         self.assertEqual(self.client.post('/logout', follow_redirects=False).status_code, 303)
         self.assertEqual(self.client.get('/api/me').status_code, 401)
+        wrong = self.client.post('/login', data={'email': 'pilot@example.com', 'password': 'wrong'}, follow_redirects=False)
+        self.assertEqual(wrong.status_code, 401)
+        relogin = self.client.post('/login', data={'email': 'PILOT@example.com', 'password': 'a-long-test-password-987'}, follow_redirects=False)
+        self.assertEqual(relogin.status_code, 303)
+        self.assertEqual(self.client.get('/api/me').status_code, 200)
+
 
     def test_signup_validates_password_csrf_and_duplicate_email(self):
         page = self.client.get('/signup')
