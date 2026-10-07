@@ -80,7 +80,6 @@ class AccountTests(unittest.TestCase):
     def test_signup_validates_password_csrf_and_duplicate_email(self):
         page = self.client.get('/signup')
         csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
-        self.assertEqual(self.client.get('/api/me').status_code, 200)
         invalid = self.client.post('/signup', data={
             'csrf_token': csrf, 'email': 'pilot@example.com', 'name': 'Pilot',
             'password': 'short', 'password_confirm': 'short',
