@@ -25,7 +25,7 @@ load_dotenv(ROOT / '.env')
 DATABASE_URL = os.getenv('DATABASE_URL', '')
 SESSION_SECRET = os.getenv('SESSION_SECRET', '')
 DEMO_MODE = os.getenv('DEMO_MODE') == '1'
-DEMO_PASSWORD = os.getenv('DEMO_PASSWORD', '')
+ALLOW_SIGNUP = os.getenv('ALLOW_SIGNUP', '0') == '1'
 COOKIE = 'coach_session'
 SESSION_SECONDS = 8 * 3600
 
