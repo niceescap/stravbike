@@ -1,5 +1,6 @@
 """OAuth route smoke tests; deliberately make no requests to Strava."""
 import os
+import secrets
 import tempfile
 import unittest
 from urllib.parse import parse_qs, urlparse
