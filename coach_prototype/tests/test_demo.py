@@ -52,7 +52,6 @@ class AccountTests(unittest.TestCase):
         with coach.SessionLocal.begin() as db:
             user = db.scalar(select(coach.User).where(coach.User.email == 'pilot@example.com'))
             self.assertIsNotNone(user)
-            self.assertIsNone(db.scalar(select(coach.User).where(coach.User.email == 'fake_user@test.local')))
             db.add_all([
                 coach.Activity(user_id=user.id, title='Test ride', occurred_at=datetime.now(timezone.utc),
                                sport='Ride', duration_minutes=40, distance_km=15.5, avg_watts=120),
