@@ -201,7 +201,7 @@ def refresh_connection(request: Request):
         connection.token_expires_at = datetime.fromtimestamp(int(expiry), tz=timezone.utc)
         connection.updated_at = datetime.now(timezone.utc)
         safe_expiry = connection.token_expires_at.isoformat()
-    return {'status': 'refreshed', 'token_expires_at': safe_expiry}
+    return RedirectResponse('/app?strava=refreshed', status_code=303)
 
 
 @oauth_app.get('/auth/status')
