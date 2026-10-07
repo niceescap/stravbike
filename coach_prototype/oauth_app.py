@@ -166,6 +166,86 @@ def authorization_callback(
                                           scopes=' '.join(sorted(scopes)))
             db.add(connection)
         else:
+
+@oauth_app.post('/auth/strava/refresh')
+def refresh_connection(request: Request):
+    """Refresh the connected athlete's short-lived access token, persist rotated refresh token, return no credentials."""
+    user_id = verify_session(request.cookies.get(COOKIE))
+    if user_id is None:
+        raise HTTPException(status_code=401, detail='Login required')
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail='Strava client credentials are not configured')
+    fernet = get_fernet()
+    with SessionLocal.begin() as db:
+        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id).with_for_update())
+        if connection is None:
+            raise HTTPException(status_code=404, detail='No Strava connection for this account')
+        try:
+            refresh_token = fernet.decrypt(connection.refresh_token_encrypted.encode('ascii')).decode('utf-8')
+        except (InvalidToken, UnicodeEncodeError):
+            raise HTTPException(status_code=500, detail='Stored Strava credential cannot be decrypted')
+        try:
+            response = httpx.post(TOKEN_URL, data={
+                'client_id': CLIENT_ID,
+                'client_secret': CLIENT_SECRET,
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+            }, timeout=20.0)
+            response.raise_for_status()
+            token_data = response.json()
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(status_code=502, detail='Strava refresh failed; reconnect the account')
+        new_refresh = token_data.get('refresh_token')
+        expires_at = token_data.get('expires_at')
+        if not new_refresh or not expires_at:
+            raise HTTPException(status_code=502, detail='Strava refresh response is incomplete')
+        connection.refresh_token_encrypted = fernet.encrypt(new_refresh.encode('utf-8')).decode('ascii')
+        connection.token_expires_at = datetime.fromtimestamp(int(expires_at), tz=timezone.utc)
+        connection.updated_at = datetime.now(timezone.utc)
+        safe_expiry = connection.token_expires_at.isoformat()
+    return {'status': 'refreshed', 'token_expires_at': safe_expiry}
+
+
+@oauth_app.post('/auth/strava/disconnect')
+def disconnect_strava(request: Request):
+    """Remove this user's local encrypted refresh token; revocation can be added with provider UI later."""
+    user_id = verify_session(request.cookies.get(COOKIE))
+    if user_id is None:
+        raise HTTPException(status_code=401, detail='Login required')
+    with SessionLocal.begin() as db:
+        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id).with_for_update())
+        if connection is not None:
+            db.delete(connection)
+    return {'status': 'disconnected'}
+
+
+@oauth_app.get('/auth/status')
+def authorization_status(request: Request):
+    user_id = verify_session(request.cookies.get(COOKIE))
+    if user_id is None:
+        raise HTTPException(status_code=401, detail='Login required')
+    with SessionLocal() as db:
+        connection = db.scalar(select(StravaConnection).where(StravaConnection.user_id == user_id))
+        if connection is None:
+            return {'connected': False}
+        return {
+            'connected': True,
+            'athlete_name': connection.athlete_name,
+            'strava_athlete_id': connection.strava_athlete_id,
+            'scopes': connection.scopes,
+            'token_expires_at': _aware(connection.token_expires_at).isoformat(),
+        }
+
+
+# End of OAuth routes.
+
+# Run separately from the UI process: uvicorn oauth_app:oauth_app --host 127.0.0.1 --port 2024
+
+# Export conventional name for the systemd command.
+app = oauth_app
+
+
+# Previous definition retained below only if old file version did not include the status route.
             connection.strava_athlete_id = int(strava_id)
             connection.athlete_name = name
             connection.profile_pic_url = profile
