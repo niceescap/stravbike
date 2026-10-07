@@ -1,0 +1,16 @@
+[Unit]
+Description=Coach Strava OAuth service
+After=network.target postgresql.service coach-prototype.service
+Requires=coach-prototype.service
+
+[Service]
+Type=simple
+User=nicee
+WorkingDirectory=/home/nicee/coach
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/home/nicee/coach/.venv/bin/uvicorn oauth_app:app --host 127.0.0.1 --port 2024 --workers 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
