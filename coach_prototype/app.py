@@ -152,7 +152,7 @@ def initialize_schema() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed_demo()
+    initialize_schema()
     yield
 
 
