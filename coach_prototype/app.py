@@ -265,7 +265,7 @@ def signup(
 
 @app.get('/login', response_class=HTMLResponse)
 def login_page(request: Request):
-    return templates.TemplateResponse(request, 'login.html', {'error': None})
+    return templates.TemplateResponse(request, 'login.html', {'error': None, 'allow_signup': ALLOW_SIGNUP})
 
 
 # Lightweight per-process rate limit; nginx should add IP rate limiting for public exposure.
