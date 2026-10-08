@@ -147,6 +147,17 @@ def authorization_callback(
     profile_url = athlete.get('profile') or athlete.get('profile_medium')
     expiry = datetime.fromtimestamp(int(expires_at), tz=timezone.utc)
     with SessionLocal.begin() as db:
+        user = db.get(User, user_id)
+        if user is None:
+            raise HTTPException(status_code=401, detail='Coach account no longer exists')
+        # Populate unset training constants from Strava's athlete summary only;
+        # never overwrite values the Coach user has already configured.
+        if user.weight_kg is None and athlete.get('weight'):
+            user.weight_kg = athlete['weight']
+        if user.ftp_watts is None and athlete.get('ftp'):
+            user.ftp_watts = int(athlete['ftp'])
+        if user.max_heartrate is None and athlete.get('max_heartrate'):
+            user.max_heartrate = int(athlete['max_heartrate'])
         owner = db.scalar(select(StravaConnection).where(StravaConnection.strava_athlete_id == int(strava_id)))
         if owner is not None and owner.user_id != user_id:
             raise HTTPException(status_code=409, detail='This Strava athlete is already linked to another account')
