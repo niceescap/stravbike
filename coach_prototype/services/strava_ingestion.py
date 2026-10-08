@@ -93,7 +93,7 @@ def import_activity(db: Session, athlete: User, client: StravaAPIClient, payload
         return activity, True, False
     try:
         summary, report = process_activity_streams(activity, athlete, client)
-        compact_chars = len(__import__('json').dumps(summary, ensure_ascii=False, separators=(',', ':'))) if summary else 0
+        compact_chars = len(json.dumps(summary, ensure_ascii=False, separators=(',', ':'))) if summary else 0
         if summary:
             logger.info('Compact activity id=%s chars=%s time_report=%s', external_id, compact_chars, report)
         return activity, True, summary is not None
