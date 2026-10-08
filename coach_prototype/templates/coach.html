@@ -34,11 +34,15 @@
         <div class="section-head"><h3>Profil athlète</h3><label for="language">🌐 <span class="sr-only">Langue</span></label><select id="language" aria-label="Langue"><option value="fr">Français</option><option value="en">English</option></select></div>
         <dl class="profile">
           <div><dt>Nom</dt><dd>{{ user.name }}</dd></div>
-          <div><dt>FTP</dt><dd>{{ user.ftp_watts if user.ftp_watts is not none else '—' }} W</dd></div>
-          <div><dt>Poids</dt><dd>{{ user.weight_kg if user.weight_kg is not none else '—' }} kg</dd></div>
-          <div><dt>FC max</dt><dd>{{ user.max_heartrate if user.max_heartrate is not none else '—' }} bpm</dd></div>
           <div><dt>Compte</dt><dd>{{ user.email }}</dd></div>
         </dl>
+        <form id="athlete-profile-form" class="profile-editor">
+          <label for="profile-weight">Poids réel (kg)</label><input id="profile-weight" name="weight_kg" type="number" min="0.1" max="300" step="0.1" value="{{ user.weight_kg if user.weight_kg is not none else '' }}" required>
+          <label for="profile-ftp">FTP connu (W, facultatif)</label><input id="profile-ftp" name="ftp_watts" type="number" min="1" max="2000" step="1" value="{{ user.ftp_watts if user.ftp_watts is not none else '' }}">
+          <label for="profile-hrmax">FC max connue (bpm, facultatif)</label><input id="profile-hrmax" name="max_heartrate" type="number" min="30" max="250" step="1" value="{{ user.max_heartrate if user.max_heartrate is not none else '' }}">
+          <button type="submit">Enregistrer mes constantes</button><span id="profile-status" role="status"></span>
+          <p class="hint">Sans FTP, celui-ci est estimé. Sans FC max, le moteur utilise le p99 de la séance.</p>
+        </form>
       </section>
 
       <section class="card strava-card">
