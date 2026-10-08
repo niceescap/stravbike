@@ -105,6 +105,7 @@ class StravaConnection(Base):
     refresh_token_encrypted: Mapped[str] = mapped_column(Text)
     token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     scopes: Mapped[str] = mapped_column(Text)
+    last_activity_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
