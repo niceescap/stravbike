@@ -112,5 +112,7 @@ def get_strava_client(db: Session, user_id: int) -> StravaAPIClient:
     connection.refresh_token_encrypted = cipher.encrypt(rotated_refresh.encode('utf-8')).decode('ascii')
     connection.token_expires_at = datetime.fromtimestamp(int(expires_at), tz=timezone.utc)
     connection.updated_at = datetime.now(timezone.utc)
-    db.flush()
+    # Strava invalidates the previous refresh token when rotating. Commit this
+    # credential before any follow-up activity/stream calls can fail.
+    db.commit()
     return StravaAPIClient(access_token)
