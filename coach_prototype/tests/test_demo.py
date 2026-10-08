@@ -48,6 +48,9 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(response.headers['location'], '/app')
         self.assertIn('httponly', response.headers['set-cookie'].lower())
         self.assertIn('secure', response.headers['set-cookie'].lower())
+        profile = self.client.post('/api/profile', json={'weight_kg': 38, 'ftp_watts': 150, 'max_heartrate': 202})
+        self.assertEqual(profile.status_code, 200)
+        self.assertEqual(profile.json(), {'status': 'saved', 'weight_kg': 38.0, 'ftp_watts': 150, 'max_heartrate': 202})
 
         with coach.SessionLocal.begin() as db:
             user = db.scalar(select(coach.User).where(coach.User.email == 'pilot@example.com'))
