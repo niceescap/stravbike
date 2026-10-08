@@ -38,8 +38,10 @@ def process_activity_streams(activity, athlete, strava_client, *, segment=None):
 
     ftp = int(athlete.ftp_watts) if athlete.ftp_watts is not None and athlete.ftp_watts > 0 else None
     hrmax = int(athlete.max_heartrate) if athlete.max_heartrate is not None and athlete.max_heartrate > 0 else None
+    real_device_power = activity.device_watts is True
     full_summary, full_activity_best = compact_from_streams(
-        streams, activity.occurred_at, weight, ftp=ftp, hrmax=hrmax, segment=None
+        streams, activity.occurred_at, weight, ftp=ftp, hrmax=hrmax,
+        segment=None, compute_best=real_device_power,
     )
     # The stored compact_json always describes the full activity. A race view
     # is derived from the same fetched streams and never changes whole-ride bests.
