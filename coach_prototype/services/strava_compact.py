@@ -93,7 +93,7 @@ def compact_from_streams(streams, start_dt, weight, ftp=None, hrmax=None, segmen
     summary, _ = summarize_session(
         start_dt, select_segment(channels, segment), float(weight), ftp, hrmax
     )
-    best = session_curve_best(channels, float(weight)) if meta['has_power'] else {'kg': float(weight), 'p': {}}
+    best = session_curve_best(channels, float(weight)) if compute_best and meta['has_power'] else None
     return summary, best
 
 
