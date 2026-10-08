@@ -146,9 +146,11 @@ def find_efforts(values, threshold, tt, min_len=30, merge_gap=20, top=8):
     for start, end in zip(np.where(edges == 1)[0], np.where(edges == -1)[0]):
         cuts = [start] + [int(b) + start + 1 for b in np.flatnonzero(np.diff(tt[start:end]) > 1)] + [end]
         runs += [[a, b] for a, b in zip(cuts[:-1], cuts[1:])]
+    segment_id = np.concatenate(([0], np.cumsum(np.diff(tt) > 1)))
     merged = []
     for a, b in runs:
-        if merged and tt[a] - tt[merged[-1][1] - 1] - 1 <= merge_gap:
+        same_continuous_segment = bool(merged) and segment_id[a] == segment_id[merged[-1][1] - 1]
+        if same_continuous_segment and tt[a] - tt[merged[-1][1] - 1] - 1 <= merge_gap:
             merged[-1][1] = b
         else:
             merged.append([a, b])
