@@ -114,15 +114,19 @@ def sync_activities(db: Session, user_id: int, client: StravaAPIClient):
         external_id = payload.get('id')
         if external_id is None:
             continue
-        existing = db.scalar(select(Activity.id).where(Activity.source_id == int(external_id)))
-        if existing is not None:
+        existing = db.scalar(select(Activity).where(Activity.source_id == int(external_id)))
+        if existing is not None and existing.user_id != user_id:
+            errors.append({'strava_id': int(external_id), 'error': 'activity-owned-by-another-user'})
+            continue
+        if existing is not None and existing.compact_json is not None:
             already_present += 1
             continue
         try:
             _, inserted, has_compact = import_activity(db, athlete, client, payload)
             added += int(inserted)
+            already_present += int(not inserted)
             compacted += int(has_compact)
-            compact_pending += int(inserted and not has_compact)
+            compact_pending += int(not has_compact)
         except Exception as exc:
             errors.append({'strava_id': int(external_id), 'error': type(exc).__name__})
             logger.warning('Activity import failed strava_id=%s error=%s', external_id, type(exc).__name__)
