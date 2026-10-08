@@ -1,6 +1,8 @@
 """Isolated cycling-coach prototype. No Strava or inference traffic in demo mode."""
 import hashlib
 import hmac
+import json
+import logging
 import os
 import secrets
 import time
