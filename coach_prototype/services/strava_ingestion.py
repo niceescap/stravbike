@@ -78,9 +78,9 @@ def import_activity(db: Session, athlete: User, client: StravaAPIClient, payload
             elapsed_time_s=int(payload.get('elapsed_time') or 0) or None,
             distance_km=round(distance_m / 1000, 2) if distance_m is not None else None,
             elevation_gain_m=_number(payload.get('total_elevation_gain')),
-            avg_watts=round(_number(payload.get('average_watts'))) if payload.get('average_watts') is not None else None,
-            avg_heartrate=round(_number(payload.get('average_heartrate'))) if payload.get('average_heartrate') is not None else None,
-            avg_cadence=round(_number(payload.get('average_cadence'))) if payload.get('average_cadence') is not None else None,
+            avg_watts=round(average_watts) if average_watts is not None else None,
+            avg_heartrate=round(average_hr) if average_hr is not None else None,
+            avg_cadence=round(average_cadence) if average_cadence is not None else None,
             device_watts=bool(payload.get('device_watts')) if payload.get('device_watts') is not None else None,
             notes=str(payload.get('description') or '')[:5000] or None,
         )
