@@ -132,13 +132,6 @@ class LevelSnapshotCache(Base):
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class LevelSnapshotCache(Base):
-    __tablename__ = 'coach_level_cache'
-    user_id: Mapped[int] = mapped_column(ForeignKey('coach_users.id', ondelete='CASCADE'), primary_key=True)
-    snapshot_json: Mapped[dict] = mapped_column(JSON)
-    source_signature: Mapped[str] = mapped_column(String(64))
-    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
 
 def hash_password(password: str, salt: str | None = None) -> str:
     salt = salt or secrets.token_hex(16)
