@@ -1,52 +1,35 @@
-# Coach — compte utilisateur et première connexion Strava
+# Coach — compte utilisateur, Strava et résumés physiologiques compacts
 
-Application FastAPI autonome sous `coach_prototype/`. Elle n'importe ni `app_multi.py` ni les anciennes tables Stravbike. Elle refuse toute base autre que PostgreSQL `coach_proto` (tests SQLite uniquement lorsque `TESTING=1`). Le démarrage crée les tables Coach, mais **ne crée aucun utilisateur, activité ou artefact fictif**. Aucune référence au compte `fake_user@test.local` n'existe dans cette app.
+Application FastAPI autonome située dans `coach_prototype/`; elle utilise exclusivement PostgreSQL `coach_proto`, jamais les tables de l'ancienne app. Le login est par compte Coach réel (`/signup`, ouvert uniquement au bootstrap `ALLOW_SIGNUP=1`). Après le premier compte, remettre `ALLOW_SIGNUP=0` puis redémarrer. La conversation reste simulée et aucune inférence n'est appelée.
 
-Le chat reste simulé. Cette branche ajoute l'inscription Coach réelle et l'association OAuth Strava, mais la synchronisation des activités est une étape ultérieure.
+## Pipeline d'activité Strava
 
-## Créer le premier compte Coach
+- Après le consentement OAuth, l'interface déclenche un import initial des **20 dernières activités**. Un clic ultérieur « Actualiser » récupère les activités postérieures au curseur `last_activity_sync_at` (pagination incrémentale bornée à 500 par passage).
+- Les activités et calculs appartiennent à l'utilisateur Coach de la session. Le token d'accès est renouvelé côté serveur ; le refresh token rotatif reste chiffré dans `coach_strava_connections`.
+- Chaque activité reçoit une demande de streams en **une seule fois**, à résolution `high`. Le même objet est transmis à `time_report`, `compact_from_streams` et à l'échantillonnage des `streams_json` (300 points au plus).
+- `compact_json` conserve le résumé court d'une activité ; `best_json` n'est généré/sauvegardé **que si `device_watts` est vrai**. La roue libre `watts=0` reste du temps actif.
+- `/api/activities/{id}/compact` renvoie le JSON minifié avec le nombre de caractères dans l'en-tête `X-Compact-Characters`. `?segment=longest` recadre seulement le résumé course ; le résumé stocké et les courbes restent ceux de toute la séance.
+- `time_report` est journalisé pour chaque stream. Si aucune pause `>=3s` n'est trouvée alors que `elapsed_time_s-moving_time_s >120`, un WARNING signale que le stream `time` peut avoir compressé les arrêts ; le moteur ne devine pas de pause.
+- `/api/level` ne fait aucun appel Strava : snapshot sur 180 jours, calcul courant 90 j vs les 90 j précédents, cache par utilisateur invalide après synchronisation/recalcul.
 
-L'inscription est **fermée par défaut**. Pour le bootstrap du premier compte réel, dans `/home/nicee/coach/.env`, activez temporairement `ALLOW_SIGNUP=1`, puis redémarrez `coach-prototype`. Depuis `https://proto.fu19.org/signup`, l'utilisateur choisit son propre email, nom affiché et mot de passe (12–128 caractères). L'email est validé syntaxiquement et normalisé, mais **pas vérifié par email**. Le mot de passe est haché PBKDF2-HMAC-SHA256 avec sel par compte. Le formulaire a un nonce CSRF et un limiteur de tentatives par IP en mémoire.
+Sources compactes : `services/fit_compact.py` (algorithmes temps actif, fenêtres avec `tt`, résumé) et `services/strava_compact.py` (adaptateur de streams). FIT parsing optionnel omis dans la web app.
 
-Dès que le compte initial est créé, remettez `ALLOW_SIGNUP=0` dans `.env` et redémarrez `coach-prototype`. Le lien signup disparaît, et `/signup` est refusé. L'utilisateur conserve l'accès à son compte ; aucune identité de démonstration n'est créée ou requise.
+## Modèle de données vérifié
 
-## OAuth Strava
+Dans ce Coach (et pas l'ancien `db/models.py`), le propriétaire est `User.id`; poids/FTP/FC max sont `User.weight_kg`, `User.ftp_watts`, `User.max_heartrate`. Les champs `coach_activities` comprennent `source_id` (Strava), `occurred_at`, `moving_time_s`, `elapsed_time_s`, `device_watts`, `streams_json`, `compact_json`, `best_json`. Le lien Strava OAuth est par `StravaConnection.user_id` vers le `User.id` authentifié. Le callback OAuth renseigne le poids, FTP ou FCmax depuis le profil Strava seulement si la valeur Coach n'a pas déjà été saisie.
 
-- L'utilisateur s'inscrit/se connecte au compte Coach puis clique **Connecter Strava** dans Paramètres.
-- OAuth est un service distinct sur `127.0.0.1:2024`; app web sur `127.0.0.1:2025`.
-- `GET /auth/strava` exige le cookie de session signé, stocke un `state` aléatoire, lié à l'ID Coach, expirant en 10 minutes et utilisable une seule fois.
-- Callback exact : `https://proto.fu19.org/auth/callback`. Dans la console développeur Strava, le champ Callback Domain contient seulement `proto.fu19.org`.
-- Scopes requis : `read,activity:read_all,profile:read_all` ; l'échange échoue si les scopes d'activité/profil ne sont pas retournés.
-- Le code est échangé côté serveur. Le `strava_athlete_id` est unique et lié à un seul utilisateur Coach.
-- Seul le refresh token est conservé, chiffré par Fernet dans `coach_strava_connections`. Le token d'accès éphémère n'est ni persisté ni rendu au navigateur. `/auth/strava/refresh` sauvegarde toujours le refresh token rotatif et n'en divulgue pas la valeur.
-- Après connexion, le tiroir affiche le profil Strava. **Les activités ne sont pas encore importées** et la conversation reste simulée.
+## Migration PostgreSQL existante
 
-## `.env` privé
-
-Ne jamais committer `.env`, transmettre des secrets dans une conversation ou afficher le fichier complet. Garde `chmod 600`. Valeurs attendues :
-
-```dotenv
-DATABASE_URL=postgresql+psycopg2:///coach_proto
-DEMO_MODE=1
-ALLOW_SIGNUP=0
-SESSION_SECRET=<secret aléatoire >= 32 caractères>
-STRAVA_CLIENT_ID=<client id>
-STRAVA_CLIENT_SECRET=<nouveau client secret>
-STRAVA_REDIRECT_URI=https://proto.fu19.org/auth/callback
-STRAVA_TOKEN_FERNET_KEY=<clé Fernet privée et sauvegardée>
-```
-
-Générer localement (ne pas copier les valeurs dans le chat) :
+`Base.metadata.create_all()` ne modifie pas les colonnes d'une table déjà présente. Sur la base isolée `coach_proto`, effectuer la sauvegarde et la migration **avant** de redémarrer l'application mise à jour :
 
 ```bash
-/home/nicee/coach/.venv/bin/python -c 'import secrets; print(secrets.token_hex(32))'
-/home/nicee/coach/.venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
-chmod 600 /home/nicee/coach/.env
+pg_dump coach_proto > ~/coach_proto_before_compact.sql
+psql -d coach_proto -v ON_ERROR_STOP=1 -f /home/nicee/coach/migrations/0002_compact_activity_cache.sql
 ```
 
-Conserver la clé Fernet en sauvegarde sûre : sa perte rend les refresh tokens existants indéchiffrables.
+La migration ajoute les champs compacts, device power, durée exacte, HRmax et table cache ; elle élargit `source_id` à BIGINT. Elle ne cible jamais `db_multi_stravbike`.
 
-## Tests isolés
+## Installation des dépendances et tests
 
 ```bash
 cd /home/nicee/coach
@@ -54,24 +37,10 @@ cd /home/nicee/coach
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-Tests en SQLite temporaire ; les requêtes Strava du test sont mockées. Ils ne prouvent pas le callback réel ni la connectivité réseau/API Strava.
+Les tests temps synthétiques reproduisent le FIT de référence : 1406 records, elapsed 1812s, actif 1417s, pauses 395s, 11 écarts de 2s et segments continus 318/1061s (course crop attendue `[751,1061]`). Les tests n'appellent pas Strava en direct.
 
-## Déploiement systemd (après revue/merge)
+## Afficher un résumé réel
 
-Copier uniquement le contenu de `coach_prototype/` vers `/home/nicee/coach`, jamais la racine historique du dépôt. Créer `coach_proto` et accorder les droits au rôle PostgreSQL `nicee`. Après mise à jour du code, redémarrer l'app 2025 pour création des nouvelles tables, puis installer OAuth :
+Après migration, mise à jour des deux services et synchronisation, ouvrir une activité du tableau puis « Voir le JSON compact ». Pour une course, choisir le résumé de segment le plus long. L'API donne le nombre de caractères via `X-Compact-Characters`. Une valeur d'exemple réelle ne peut être rapportée qu'après cette exécution sur la base de l'utilisateur connecté ; ne partagez jamais le `.env`, un code OAuth ou un refresh token.
 
-```bash
-sudo cp /home/nicee/coach/coach-oauth.service /etc/systemd/system/coach-oauth.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now coach-oauth
-```
-
-Nginx garde `/` vers `127.0.0.1:2025` et `/auth/` vers `127.0.0.1:2024`, avec `proxy_pass http://127.0.0.1:2024;` **sans slash final** pour préserver `/auth/callback`. Les services sont localhost only. Tester Nginx et les deux health checks avant de démarrer le vrai OAuth.
-
-## Limites / sécurité
-
-- L'inscription ouverte est un interrupteur de bootstrap : la fermer (`ALLOW_SIGNUP=0`) après le premier compte.
-- Pas de confirmation email ni récupération de mot de passe dans cette première version.
-- Le chat reste simulé, sans LLM, facturation ou consommation de token réelle. Aucune activité réelle n'est importée par ce flux OAuth seul.
-- Ne pas supprimer automatiquement un compte ou des données existantes ; migration/assainissement éventuel à examiner séparément.
-- Aucun service du serveur, `.env`, base ou Nginx n'est modifié par les commits Git.
+Services : app UI `127.0.0.1:2025`, OAuth `127.0.0.1:2024`; Nginx `/auth/` doit proxifier vers 2024, tout le reste vers 2025. Aucun déploiement ou changement de serveur n'est fait par cette branche Git.
