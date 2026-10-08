@@ -42,6 +42,8 @@ if len(SESSION_SECRET) < 32:
     raise RuntimeError('SESSION_SECRET must be at least 32 characters')
 if not DEMO_MODE:
     raise RuntimeError('This prototype may only run with DEMO_MODE=1')
+logger = logging.getLogger(__name__)
+
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 
