@@ -32,6 +32,20 @@
   $('detail-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   $('language').addEventListener('change', event => { lang = event.target.value === 'en' ? 'en' : 'fr'; document.documentElement.lang = lang; render(); });
+  $('athlete-profile-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form=event.currentTarget, status=$('profile-status'), field=id=>$(id).value.trim();
+    const optionalInteger=value=>value===''?null:Number.parseInt(value,10);
+    const weight=field('profile-weight');
+    try {
+      const response=await fetch('/api/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        weight_kg:weight===''?null:Number.parseFloat(weight), ftp_watts:optionalInteger(field('profile-ftp')),
+        max_heartrate:optionalInteger(field('profile-hrmax'))
+      })});
+      const result=await response.json(); if(!response.ok) throw new Error(result.detail || 'Enregistrement impossible');
+      status.textContent='Constantes enregistrées.'; await loadLevel();
+    } catch(error) { status.textContent=error.message || 'Enregistrement impossible.'; }
+  });
   $('filter').addEventListener('input',render); $('sort').addEventListener('change',render);
   $('chat-form').addEventListener('submit', event => {
     event.preventDefault(); if (busy) return;
