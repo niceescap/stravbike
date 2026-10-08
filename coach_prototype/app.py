@@ -70,8 +70,17 @@ class Activity(Base):
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
     distance_km: Mapped[float | None] = mapped_column(Numeric(8, 2))
     avg_watts: Mapped[int | None] = mapped_column(Integer)
+    avg_heartrate: Mapped[int | None] = mapped_column(Integer)
+    avg_cadence: Mapped[int | None] = mapped_column(Integer)
+    elevation_gain_m: Mapped[float | None] = mapped_column(Numeric(9, 2))
+    moving_time_s: Mapped[int | None] = mapped_column(Integer)
+    elapsed_time_s: Mapped[int | None] = mapped_column(Integer)
+    device_watts: Mapped[bool | None] = mapped_column(Boolean)
+    streams_json: Mapped[dict | None] = mapped_column(JSON)
+    compact_json: Mapped[dict | None] = mapped_column(JSON)
+    best_json: Mapped[dict | None] = mapped_column(JSON)
     notes: Mapped[str | None] = mapped_column(Text)
-    source_id: Mapped[int | None] = mapped_column(Integer, unique=True)  # future external activity id
+    source_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
 
 
 class Artifact(Base):
