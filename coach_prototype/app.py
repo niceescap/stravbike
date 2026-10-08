@@ -371,3 +371,131 @@ def timeline_detail(kind: str, item_id: int, user: User = Depends(current_user),
             return dict(type='artifact', title=item.title, date=item.created_at.isoformat(),
                         markdown=item.markdown, related_activity_id=item.related_activity_id)
     raise HTTPException(status_code=404, detail='Not found')
+
+
+def _compact_response(summary: dict) -> Response:
+    payload = json.dumps(summary, ensure_ascii=False, separators=(',', ':'))
+    return Response(content=payload, media_type='application/json',
+                    headers={'X-Compact-Characters': str(len(payload))})
+
+
+def _aware_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def _parse_strava_datetime(value) -> datetime | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _as_number(value):
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post('/api/activities/refresh')
+def refresh_strava_activities(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Import the latest 20 rides on first sync, then all activities newer than the cursor."""
+    if user.weight_kg is None or float(user.weight_kg) <= 0:
+        raise HTTPException(status_code=409, detail='Ajoutez un poids réel au profil avant de calculer les rapports compacts.')
+    try:
+        from services.strava_api import StravaAPIError, get_strava_client
+        from services.strava_ingestion import sync_activities
+        client = get_strava_client(db, user.id)
+        return sync_activities(db, user.id, client)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except StravaAPIError as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception('Unexpected Strava sync failure for Coach user id=%s', user.id)
+        raise HTTPException(status_code=500, detail='Synchronisation Strava impossible ; consulter les journaux serveur.') from exc
+
+
+@app.get('/api/activities/{activity_id}/compact')
+def get_activity_compact(
+    activity_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    segment: str | None = None,
+):
+    """Return cached compact JSON or build it from one high-resolution Strava fetch.
+
+    `segment=longest` crops only the session summary; best_json stays full-ride.
+    """
+    activity = db.scalar(select(Activity).where(Activity.id == activity_id, Activity.user_id == user.id))
+    if activity is None:
+        raise HTTPException(status_code=404, detail='Activity not found')
+    if segment is not None and segment != 'longest':
+        try:
+            start, end = (float(part) for part in segment.split('-', 1))
+            if start < 0 or end <= start:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="segment must be 'longest' or START-END seconds")
+    if segment is None and activity.compact_json is not None:
+        return _compact_response(activity.compact_json)
+    if user.weight_kg is None or float(user.weight_kg) <= 0:
+        raise HTTPException(status_code=409, detail='Athlete weight is required for compact W/kg analysis')
+    if activity.source_id is None:
+        raise HTTPException(status_code=409, detail='Activity has no Strava source ID')
+    try:
+        from services.compact_ingestion import process_activity_streams
+        from services.strava_api import get_strava_client
+        client = get_strava_client(db, user.id)
+        summary, _report = process_activity_streams(activity, user, client, segment=segment)
+        if summary is None:
+            raise HTTPException(status_code=422, detail='Compact summary unavailable for this activity')
+        cache = db.get(LevelSnapshotCache, user.id)
+        if cache is not None:
+            db.delete(cache)
+        db.commit()
+        return _compact_response(summary)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.warning('Compact summary failed for activity=%s (%s)', activity.source_id, type(exc).__name__)
+        raise HTTPException(status_code=502, detail='Unable to fetch/compact this Strava activity') from exc
+
+
+@app.get('/api/level')
+def get_level_snapshot(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Cached 180-day source window; current 90 days vs prior 90 days, no Strava calls."""
+    from services.strava_compact import level_snapshot
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=180)
+    rows = db.execute(
+        select(Activity.id, Activity.occurred_at, Activity.best_json)
+        .where(Activity.user_id == user.id, Activity.occurred_at >= cutoff, Activity.best_json.is_not(None))
+        .order_by(Activity.id)
+    ).all()
+    fingerprint = hashlib.sha256(json.dumps(
+        [(row.id, _aware_datetime(row.occurred_at).isoformat(), row.best_json)
+         for row in rows], sort_keys=True, separators=(',', ':'), default=str
+    ).encode('utf-8')).hexdigest()
+    cache = db.get(LevelSnapshotCache, user.id)
+    if cache is not None:
+        computed = _aware_datetime(cache.computed_at)
+        if cache.source_signature == fingerprint and now - computed < timedelta(hours=6):
+            return cache.snapshot_json
+    best_rows = [(_aware_datetime(row.occurred_at).date(), row.best_json) for row in rows]
+    weight = float(user.weight_kg) if user.weight_kg is not None else None
+    snapshot = level_snapshot(best_rows, weight, today=now.date(), window_days=90)
+    if cache is None:
+        cache = LevelSnapshotCache(user_id=user.id, snapshot_json=snapshot,
+                                   source_signature=fingerprint, computed_at=now)
+        db.add(cache)
+    else:
+        cache.snapshot_json = snapshot
+        cache.source_signature = fingerprint
+        cache.computed_at = now
+    db.commit()
+    return snapshot
