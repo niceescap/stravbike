@@ -76,7 +76,7 @@ def time_report(streams):
         'monotone': bool(np.all(gaps > 0)),
         'channels_non_vides': {
             key: int(np.any(~np.isnan(np.asarray([np.nan if value is None else value
-                                                  for value in (_data(streams, name) or [])], dtype=float)))
+                                                  for value in (_data(streams, name) or [])], dtype=float))))
             for key, name in MAPPING.items()
         },
     }
