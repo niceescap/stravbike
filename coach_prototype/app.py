@@ -339,6 +339,7 @@ def coach_page(request: Request, user: User = Depends(current_user), db: Session
 def me(user: User = Depends(current_user)):
     return {'name': user.name, 'email': user.email, 'ftp_watts': user.ftp_watts,
             'weight_kg': float(user.weight_kg) if user.weight_kg is not None else None,
+            'max_heartrate': user.max_heartrate,
             'credit_tokens': user.credit_tokens, 'model_choice': user.model_choice,
             'demo': True}
 
