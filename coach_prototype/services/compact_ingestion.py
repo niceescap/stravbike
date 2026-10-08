@@ -50,6 +50,7 @@ def process_activity_streams(activity, athlete, strava_client, *, segment=None):
     if segment is None:
         return full_summary, report
     segment_summary, _ = compact_from_streams(
-        streams, activity.occurred_at, weight, ftp=ftp, hrmax=hrmax, segment=segment
+        streams, activity.occurred_at, weight, ftp=ftp, hrmax=hrmax,
+        segment=segment, compute_best=False,
     )
     return segment_summary, report
