@@ -42,7 +42,7 @@ def _data(streams, key):
 def streams_to_channels(streams):
     """Convert Strava streams to compressed active-second channels plus elapsed `tt`."""
     times = _data(streams, 'time')
-    if times is None or len(times) < 10:
+    if times is None or len(times) < 2:
         raise ValueError("stream 'time' absent or too short")
     idx = np.round(np.asarray(times, dtype=float)).astype(int)
     raw = {}
