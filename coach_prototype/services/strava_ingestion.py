@@ -1,4 +1,5 @@
 """Incremental per-user Strava activity import and compact preprocessing."""
+import json
 import logging
 from datetime import datetime, timezone
 
