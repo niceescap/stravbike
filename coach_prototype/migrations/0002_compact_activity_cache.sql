@@ -1,5 +1,5 @@
--- Coach-only migration. Run against coach_proto after backing it up.
--- Safe to apply repeatedly. Does not reference the legacy Stravbike database.
+-- Coach-only migration for compact Strava-derived activity data. Back up coach_proto first.
+-- Safe to rerun on PostgreSQL; never point this at db_multi_stravbike.
 ALTER TABLE coach_users
     ADD COLUMN IF NOT EXISTS max_heartrate INTEGER;
 
@@ -17,7 +17,6 @@ ALTER TABLE coach_activities
     ADD COLUMN IF NOT EXISTS compact_json JSON,
     ADD COLUMN IF NOT EXISTS best_json JSON;
 
--- Strava activity IDs are 64-bit values; keep external IDs lossless.
 ALTER TABLE coach_activities
     ALTER COLUMN source_id TYPE BIGINT USING source_id::BIGINT;
 
