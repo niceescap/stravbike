@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 INITIAL_ACTIVITY_COUNT = 20
 PAGE_SIZE = 100
 MAX_INCREMENTAL_ACTIVITIES = 500
-MAX_COMPACT_LOG_CHARS = 1600
 
 
 def _strava_datetime(value):
