@@ -1,17 +1,19 @@
-/* No external LLM, Strava or payment calls: this is an explicit demo. */
+/* Demo conversation is local-only. Strava activity calls use the authenticated
+   Coach session; no LLM request is made by this prototype. */
 (() => {
   const $ = id => document.getElementById(id);
   const panel = $('settings-panel'), trigger = $('open-settings'), overlay = $('overlay');
   const table = $('timeline'), dialog = $('detail');
   let items = [], lang = 'fr', busy = false, previousFocus;
   const copy = {
-    fr: { load: 'Chargement…', empty: 'Aucun résultat.', error: 'Impossible de charger les données.', detailError: 'Détails indisponibles.', activity: 'Activité', artifact: 'Document MD', demo: 'Réponse simulée : je pourrai comparer un document de séance aux activités enregistrées lorsque le coach IA sera connecté. Pour le moment, consultez les exemples dans vos paramètres.' },
-    en: { load: 'Loading…', empty: 'No results.', error: 'Unable to load data.', detailError: 'Details unavailable.', activity: 'Activity', artifact: 'Markdown note', demo: 'Simulated reply: I will be able to compare a training note with recorded activities once the AI coach is connected. For now, browse the examples in settings.' }
+    fr: { load: 'Chargement…', empty: 'Aucun résultat.', error: 'Impossible de charger les données.', detailError: 'Détails indisponibles.', activity: 'Activité', artifact: 'Document MD', demo: 'Réponse simulée : le coach pourra comparer cette activité à vos documents lorsque l’inférence sera activée.', syncing: 'Synchronisation Strava…', syncError: 'Synchronisation impossible.', levelError: 'Niveau indisponible.' },
+    en: { load: 'Loading…', empty: 'No results.', error: 'Unable to load data.', detailError: 'Details unavailable.', activity: 'Activity', artifact: 'Markdown note', demo: 'Simulated reply: the coach can compare this activity with your documents when inference is enabled.', syncing: 'Syncing Strava…', syncError: 'Sync failed.', levelError: 'Level unavailable.' }
   };
   function open() {
     previousFocus = document.activeElement; overlay.hidden = false; panel.inert = false;
     panel.classList.add('open'); panel.setAttribute('aria-hidden','false'); trigger.setAttribute('aria-expanded','true');
     $('close-settings').focus();
+    loadLevel();
     if (!items.length) load();
   }
   function close() {
@@ -21,7 +23,8 @@
   trigger.addEventListener('click',open); $('close-settings').addEventListener('click',close); overlay.addEventListener('click',close);
   panel.addEventListener('keydown', event => {
     if (event.key !== 'Tab') return;
-    const focusable = [...panel.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled])')];
+    const focusable = [...panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled])')];
+    if (!focusable.length) return;
     if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
     else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
   });
@@ -30,6 +33,15 @@
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   $('language').addEventListener('change', event => { lang = event.target.value === 'en' ? 'en' : 'fr'; document.documentElement.lang = lang; render(); });
   $('filter').addEventListener('input',render); $('sort').addEventListener('change',render);
+  $('chat-form').addEventListener('submit', event => {
+    event.preventDefault(); if (busy) return;
+    const input=$('chat-input'), text=input.value.trim(); if (!text) return;
+    busy=true; addMessage('user',text); input.value=''; input.style.height='auto';
+    setTimeout(() => { addMessage('assistant',copy[lang].demo,true); busy=false; },350);
+  });
+  $('chat-input').addEventListener('input',event => { event.target.style.height='auto'; event.target.style.height=Math.min(event.target.scrollHeight,130)+'px'; });
+  $('chat-input').addEventListener('keydown',event => { if (event.key==='Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('chat-form').requestSubmit(); } });
+  if ($('sync-strava')) $('sync-strava').addEventListener('click',syncStrava);
 
   function num(value, unit='') { return value == null ? '—' : `${Number(value).toLocaleString(lang, {maximumFractionDigits:1})}${unit}`; }
   function date(value) { const d = new Date(value); return Number.isNaN(+d) ? '—' : d.toLocaleString(lang, {dateStyle:'short',timeStyle:'short'}); }
@@ -60,6 +72,44 @@
       items = await response.json(); if (!Array.isArray(items)) throw Error('Invalid response'); render();
     } catch (_) { message(copy[lang].error); }
   }
+  function showLevel(snapshot) {
+    const target = $('level-snapshot'); target.replaceChildren();
+    const dl = document.createElement('dl'); dl.className='profile';
+    const fields = [
+      ['Niveau', snapshot.lvl == null ? '—' : `${snapshot.lvl}/100`],
+      ['Tendance', snapshot.tr == null ? '—' : `${snapshot.tr > 0 ? '+' : ''}${snapshot.tr}`],
+      ['FTP estimé', num(snapshot.ftp,' W')],
+      ['FTP relatif', num(snapshot.ftp_wkg,' W/kg')],
+      ...Object.entries(snapshot.sc || {}).map(([name,value]) => [name,`${value}/100`]),
+    ];
+    fields.forEach(([label,value]) => { const wrap=document.createElement('div'), dt=document.createElement('dt'), dd=document.createElement('dd'); dt.textContent=label; dd.textContent=value; wrap.append(dt,dd); dl.appendChild(wrap); });
+    const note=document.createElement('p'); note.className='hint'; note.textContent=`Calcul au ${snapshot.asof || '—'} · records de puissance réelle uniquement.`;
+    target.append(dl,note);
+  }
+  async function loadLevel() {
+    try { const response=await fetch('/api/level',{credentials:'same-origin'}); if(!response.ok) throw Error(); showLevel(await response.json()); }
+    catch (_) { $('level-snapshot').textContent=copy[lang].levelError; }
+  }
+  async function syncStrava() {
+    const button=$('sync-strava'), status=$('sync-status'); if(!button || button.disabled) return;
+    button.disabled=true; status.textContent=copy[lang].syncing;
+    try {
+      const response=await fetch('/api/activities/refresh',{method:'POST',credentials:'same-origin'});
+      const result=await response.json(); if(!response.ok) throw new Error(result.detail || copy[lang].syncError);
+      status.textContent=`${result.mode === 'initial' ? 'Import initial' : 'Actualisation'} : ${result.imported} activité(s), ${result.compacted} résumé(s) compact(s).`;
+      items=[]; await load(); await loadLevel();
+    } catch (error) { status.textContent=error.message || copy[lang].syncError; }
+    finally { button.disabled=false; }
+  }
+  async function showCompact(activity, segment=null) {
+    const response=await fetch(`/api/activities/${encodeURIComponent(activity.id)}/compact${segment ? `?segment=${encodeURIComponent(segment)}` : ''}`,{credentials:'same-origin'});
+    const body=await response.json();
+    if(!response.ok) throw new Error(body.detail || copy[lang].detailError);
+    const heading=document.createElement('h3'); heading.textContent=segment ? `Résumé compact (${segment})` : 'Résumé compact';
+    const count=document.createElement('p'); count.className='hint'; count.textContent=`${response.headers.get('X-Compact-Characters') || JSON.stringify(body).length} caractères JSON`;
+    const pre=document.createElement('pre'); pre.className='markdown'; pre.textContent=JSON.stringify(body);
+    $('detail-body').append(heading,count,pre);
+  }
   async function detail(item) {
     $('detail-title').textContent = item.title; $('detail-body').textContent = copy[lang].load; dialog.showModal();
     try {
@@ -78,6 +128,8 @@
         [['Date',date(data.date)],['Durée',num(data.duration_minutes,' min')],['Distance',num(data.distance_km,' km')],['Puissance',num(data.avg_watts,' W')],['Note',data.notes || '—']].forEach(([label,value]) => {
           const div = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent=label; dd.textContent=value; div.append(dt,dd); dl.appendChild(div);
         }); body.appendChild(dl);
+        const compact=document.createElement('button'); compact.textContent='Voir le JSON compact'; compact.addEventListener('click',()=>showCompact(item).catch(error=>{body.append(document.createTextNode(error.message));})); body.appendChild(compact);
+        const race=document.createElement('button'); race.textContent='Résumé course · segment continu le plus long'; race.addEventListener('click',()=>showCompact(item,'longest').catch(error=>{body.append(document.createTextNode(error.message));})); body.appendChild(race);
       }
     } catch (_) { $('detail-body').textContent = copy[lang].detailError; }
   }
@@ -95,12 +147,12 @@
     }
     row.append(icon,bubble); $('messages').appendChild(row); $('messages').scrollTop=$('messages').scrollHeight;
   }
-  $('chat-input').addEventListener('input',event => { event.target.style.height='auto'; event.target.style.height=Math.min(event.target.scrollHeight,130)+'px'; });
-  $('chat-input').addEventListener('keydown',event => { if (event.key==='Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('chat-form').requestSubmit(); } });
-  $('chat-form').addEventListener('submit',event => {
-    event.preventDefault(); if (busy) return;
-    const input=$('chat-input'), text=input.value.trim(); if (!text) return;
-    busy=true; addMessage('user',text); input.value=''; input.style.height='auto';
-    setTimeout(() => { addMessage('assistant',copy[lang].demo,true); busy=false; },350);
-  });
+  const query=new URLSearchParams(location.search);
+  if(query.get('strava')==='connected'){
+    history.replaceState({},'',location.pathname);
+    open();
+    syncStrava(); // first connection imports up to the latest 20 activities
+  } else if(query.get('strava')==='refreshed'){
+    history.replaceState({},'',location.pathname);
+  }
 })();
