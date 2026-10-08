@@ -8,7 +8,7 @@ from services.fit_compact import best_avg, regularize, segments
 from services.strava_compact import streams_to_channels, time_report
 
 PAUSE_GAPS = [3, 30, 33, 11, 58, 20, 43, 13, 30, 59, 106]
-ACTIVE_RUNS = [318, 1061] + [4] * 8 + [3] * 2
+ACTIVE_RUNS = [318] + [4] * 8 + [3] * 2 + [1061]
 
 
 def reference_streams():
