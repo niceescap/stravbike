@@ -16,7 +16,7 @@ def reference_streams():
     idx = []
     cursor = 0
     drift_remaining = 11
-    drift_by_run = [5, 6] + [0] * 10
+    drift_by_run = [5] + [0] * 10 + [6]
     for run_index, (active_length, double_gaps) in enumerate(zip(ACTIVE_RUNS, drift_by_run)):
         positions = [0]
         elapsed = 0
