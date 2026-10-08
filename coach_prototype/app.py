@@ -343,6 +343,42 @@ def me(user: User = Depends(current_user)):
             'demo': True}
 
 
+@app.post('/api/profile')
+async def update_profile(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Save athlete constants; true FTP/HRmax are preferred over estimates."""
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail='Invalid JSON body') from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail='Invalid JSON body')
+    validators = {
+        'weight_kg': (0.1, 300.0, float),
+        'ftp_watts': (1, 2000, int),
+        'max_heartrate': (30, 250, int),
+    }
+    for key, (low, high, cast) in validators.items():
+        if key not in body:
+            continue
+        value = body[key]
+        if value is None or value == '':
+            setattr(user, key, None)
+            continue
+        try:
+            parsed = cast(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise HTTPException(status_code=422, detail=f'{key} must be numeric') from exc
+        if not low <= parsed <= high:
+            raise HTTPException(status_code=422, detail=f'{key} is outside the accepted range')
+        setattr(user, key, parsed)
+    cache = db.get(LevelSnapshotCache, user.id)
+    if cache is not None:
+        db.delete(cache)
+    db.commit()
+    return {'status': 'saved', 'weight_kg': float(user.weight_kg) if user.weight_kg is not None else None,
+            'ftp_watts': user.ftp_watts, 'max_heartrate': user.max_heartrate}
+
+
 @app.get('/api/timeline')
 def timeline(user: User = Depends(current_user), db: Session = Depends(get_db)):
     rides = db.scalars(select(Activity).where(Activity.user_id == user.id)).all()
