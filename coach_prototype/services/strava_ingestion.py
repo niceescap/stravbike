@@ -64,6 +64,9 @@ def import_activity(db: Session, athlete: User, client: StravaAPIClient, payload
     else:
         moving_seconds = int(payload.get('moving_time') or 0)
         distance_m = _number(payload.get('distance'))
+        average_watts = _number(payload.get('average_watts'))
+        average_hr = _number(payload.get('average_heartrate'))
+        average_cadence = _number(payload.get('average_cadence'))
         activity = Activity(
             user_id=athlete.id,
             source_id=external_id,
