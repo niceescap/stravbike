@@ -82,7 +82,7 @@ def time_report(streams):
     }
 
 
-def compact_from_streams(streams, start_dt, weight, ftp=None, hrmax=None, segment=None):
+def compact_from_streams(streams, start_dt, weight, ftp=None, hrmax=None, segment=None, compute_best=True):
     """Return a compact LLM session summary and best-effort record for level stats.
 
     `best_json` must be discarded by the caller unless Strava says device_watts.
