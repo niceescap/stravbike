@@ -55,6 +55,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     ftp_watts: Mapped[int | None] = mapped_column(Integer)
     weight_kg: Mapped[float | None] = mapped_column(Numeric(5, 2))
+    max_heartrate: Mapped[int | None] = mapped_column(Integer)
     credit_tokens: Mapped[int] = mapped_column(Integer, default=0)
     model_choice: Mapped[str] = mapped_column(String(100), default='demo')
 
