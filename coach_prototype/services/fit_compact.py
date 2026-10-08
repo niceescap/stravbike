@@ -105,8 +105,11 @@ def np_power(power, tt=None):
     rolling = (sums[30:] - sums[:-30]) / 30
     if tt is not None:
         contiguous = (tt[29:] - tt[:len(power) - 29]) == 29
-        if contiguous.any():
-            rolling = rolling[contiguous]
+        if not contiguous.any():
+            # No valid 30-second window exists; report active-time mean rather
+            # than letting a window span a stopped-clock pause.
+            return float(power.mean())
+        rolling = rolling[contiguous]
     return float(np.mean(rolling ** 4) ** 0.25) if len(rolling) else 0.0
 
 
